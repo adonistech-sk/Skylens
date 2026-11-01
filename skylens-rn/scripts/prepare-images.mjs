@@ -62,10 +62,10 @@ for (const [file, name] of [['jupiter.jpg', 'jupiter'], ['mars.jpg', 'mars']]) {
 // upper left, warmed toward the reference's tan.
 const turned = await sharp(`${src}/saturn_alt.jpg`, { limitInputPixels: false }).flatten({ background: '#000' }).resize(3600).rotate(32, { background: '#000' }).toBuffer();
 const tm = await sharp(turned).metadata();
-const scaled = await sharp(turned).resize(Math.round(tm.width * 0.82)).modulate({ saturation: 2.4, brightness: 1.2 }).tint({ r: 255, g: 216, b: 178 }).toBuffer();
+const scaled = await sharp(turned).resize(Math.round(tm.width * 0.82)).modulate({ saturation: 2.1, brightness: 0.98 }).tint({ r: 255, g: 216, b: 178 }).toBuffer();
 const sm = await sharp(scaled).metadata();
 const cx = Math.round(sm.width / 2), cy = Math.round(sm.height / 2);
-await sharp(scaled).extract({ left: cx - 1050, top: cy - 640, width: 1179, height: 1560 }).jpeg(jpg).toFile(`${out}/saturn-pro.jpg`);
+await sharp(scaled).extract({ left: cx - 1170, top: cy - 480, width: 1179, height: 1560 }).jpeg(jpg).toFile(`${out}/saturn-pro.jpg`);
 
 // Location: the Tetons at dusk, cropped to sky and peaks, with the photo's own pink band deepened.
 await sharp(`${src}/mountain_twilight_alt.jpg`).extract({ left: 1740, top: 420, width: 1560, height: 1320 })

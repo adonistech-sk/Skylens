@@ -10,7 +10,7 @@ import { color, font, type } from '../design/tokens';
 import { EventThumb } from '../features/events/EventThumb';
 import { useEvents } from '../features/events/useEvents';
 import { dayAndMonth, dayOfMonth } from '../state/format';
-import { skyTime, useObserver } from '../state/store';
+import { skyTime, useObserver, useStore } from '../state/store';
 
 const WEEK = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -91,14 +91,16 @@ function Calendar({ tz }: { tz: string }) {
 export default function Events() {
   const [mode, setMode] = useState<'upcoming' | 'calendar'>('upcoming');
   const observer = useObserver();
+  const proActive = useStore((s) => s.proActive);
+  const choose = (m: 'upcoming' | 'calendar') => { if (m === 'calendar' && !proActive) router.push('/pro'); else setMode(m); };
   const { events, failed } = useEvents(skyTime(), 120);
   const upcoming = useMemo(() => (events ?? [])
     .filter((e) => e.date.getTime() >= skyTime() - DAY && (e.isSignificant || e.kind === 'meteorShower' || (e.kind === 'conjunction' && !e.bodies.includes('moon'))) && e.visibility.kind !== 'notVisible')
     .slice(0, 16), [events]);
 
   return (
-    <Page title="Events" right={<IconButton testID="events-calendar" name="calendar" label="Show calendar" glass={false} iconSize={26} active={mode === 'calendar'} onPress={() => setMode(mode === 'calendar' ? 'upcoming' : 'calendar')} />}>
-      <SegmentedControl style={styles.segments} value={mode} onChange={setMode} options={[{ value: 'upcoming', label: 'Upcoming' }, { value: 'calendar', label: 'Calendar' }]} />
+    <Page title="Events" right={<IconButton testID="events-calendar" name="calendar" label="Show calendar" glass={false} iconSize={26} active={mode === 'calendar'} onPress={() => choose(mode === 'calendar' ? 'upcoming' : 'calendar')} />}>
+      <SegmentedControl style={styles.segments} value={mode} onChange={choose} options={[{ value: 'upcoming', label: 'Upcoming' }, { value: 'calendar', label: 'Calendar' }]} />
       {mode === 'calendar' ? <Calendar tz={observer.timeZone} /> : failed ? <View style={styles.list}><Notice tone="warn" text="Events couldn't be calculated for this date." /></View> : !events ? (
         <View style={styles.loading}><ActivityIndicator color={color.peach} /><Text style={[type.caption, { marginTop: 10 }]}>Calculating from the ephemeris</Text></View>
       ) : (

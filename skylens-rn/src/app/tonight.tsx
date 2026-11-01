@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { DEG } from '../astronomy/core';
 import { planTonight, TonightPlan } from '../astronomy/tonight';
@@ -30,6 +30,7 @@ function Time({ icon, tint, label, value }: { icon: IconName; tint: string; labe
 export default function Tonight() {
   const observer = useObserver();
   const use24h = useStore((s) => s.use24h);
+  const proActive = useStore((s) => s.proActive);
   const clock = useStore((s) => s.clock);
   const [plan, setPlan] = useState<TonightPlan | null>(null);
   const date = new Date(skyTime());
@@ -73,10 +74,11 @@ export default function Tonight() {
             <Text style={styles.heading} accessibilityRole="header">Best to See Tonight</Text>
             {noDark ? (
               <Notice text={plan.night.condition === 'polarDay' ? 'The Sun stays up all night here, so nothing can be recommended.' : 'Nothing is well placed from here during tonight’s dark hours.'} />
-            ) : plan.recommendations.filter((r) => r.object.id !== 'body:moon').slice(0, 8).map((r, i, all) => (
+            ) : plan.recommendations.filter((r) => r.object.id !== 'body:moon').slice(0, proActive ? 11 : 3).map((r, i, all) => (
               <Row key={r.object.id} testID={`tonight-${r.object.name}`} leading={<ObjectThumb object={r.object} />} title={r.object.name} subtitle={r.summary} last={i === all.length - 1}
                 onPress={() => router.push({ pathname: '/object/[id]', params: { id: r.object.id } })} />
             ))}
+            {!noDark && !proActive ? <Pressable testID="tonight-more" accessibilityRole="button" onPress={() => router.push('/pro')} style={styles.more}><Text style={styles.moreText}>See the complete list</Text></Pressable> : null}
           </View>
         </>
       )}
@@ -100,4 +102,6 @@ const styles = StyleSheet.create({
   rule: { height: StyleSheet.hairlineWidth, backgroundColor: color.hairlineStrong, marginHorizontal: 22, marginTop: 16 },
   section: { paddingHorizontal: 22, marginTop: 14 },
   heading: { ...type.heading, fontSize: 25, marginBottom: 4 },
+  more: { paddingVertical: 14, alignItems: 'center' },
+  moreText: { fontFamily: font.medium, fontSize: 14, color: color.peach },
 });

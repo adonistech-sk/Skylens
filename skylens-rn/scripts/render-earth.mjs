@@ -64,8 +64,8 @@ function backdrop(W, H, centerRA, centerDec, spanDeg, gain) {
     let dra = ((centerRA - ra + 540) % 360) - 180;
     const x = W / 2 + dra / px, y = H / 2 + (centerDec - dec) / px;
     if (x < 2 || y < 2 || x > W - 3 || y > H - 3) continue;
-    const size = Math.max(0.6, 2.0 - mag * 0.26);
-    const flux = Math.min(1, 0.1 + (8 - mag) * 0.13);
+    const size = Math.max(0.5, 1.5 - mag * 0.2);
+    const flux = Math.min(1, 0.04 + (8 - mag) * 0.1);
     const r = Math.ceil(size * 2);
     for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
       const d = Math.hypot(dx, dy) / size;
@@ -117,9 +117,9 @@ function renderScene({ W, H, horizonY, radius, subLon, subLat, sunX, sunY, sunSt
       const light = nx * sunDir[0] + ny * sunDir[1] + z * sunDir[2];
       const dayAmt = Math.min(1, Math.max(0, light / 0.34));
       const lum = (n[0] * 0.5 + n[1] * 0.5);
-      const city = Math.pow(Math.max(0, lum - 0.1), 1.2) * 3.4;
+      const city = Math.pow(Math.max(0, lum - 0.24), 1.15) * 4.2;
       const cityC = [city * 1.3, city * 0.62, city * 0.2];
-      const land = [0.008 + n[2] * 0.05, 0.016 + n[2] * 0.08, 0.05 + n[2] * 0.16];
+      const land = [0.006 + n[2] * 0.012, 0.014 + n[2] * 0.03, 0.05 + n[2] * 0.12];
       col = [
         land[0] * (1 - dayAmt) + d[0] * dayAmt * 0.62 + cityC[0] * (1 - dayAmt),
         land[1] * (1 - dayAmt) + d[1] * dayAmt * 0.66 + cityC[1] * (1 - dayAmt),
@@ -154,7 +154,7 @@ fs.mkdirSync('assets/images', { recursive: true });
 // Europe's night lights lit by a sunrise on the left limb.
 console.log(await renderScene({
   W: 1179, H: 2556, horizonY: 1400, radius: 2300, subLon: 14, subLat: -24, sunX: 40, sunY: 1486, sunStrength: 1, sunVec: [-1, 0.2, -0.86],
-  ra: 268, dec: 14, span: 40, gain: 0.72, violet: true, file: 'assets/images/earth-onboarding.jpg',
+  ra: 268, dec: 14, span: 40, gain: 1.5, violet: true, file: 'assets/images/earth-onboarding.jpg',
 }));
 console.log(await renderScene({
   W: 1179, H: 1500, horizonY: 780, radius: 1800, subLon: 24, subLat: -22, sunX: -220, sunY: 1050, sunStrength: 0, sunVec: [0, -1, -0.6],

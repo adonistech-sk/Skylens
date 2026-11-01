@@ -9,6 +9,8 @@ import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { color } from '../design/tokens';
+import { refreshEntitlement } from '../features/subscription/iap';
+import { DEMO_MODE } from '../state/demo';
 import { hydrate, useStore } from '../state/store';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -17,7 +19,7 @@ export default function RootLayout() {
   const [fonts] = useFonts({ Newsreader_300Light, Newsreader_300Light_Italic, Inter_400Regular, Inter_500Medium, Inter_600SemiBold });
   const hydrated = useStore((s) => s.hydrated);
 
-  useEffect(() => { hydrate(); }, []);
+  useEffect(() => { hydrate().then(() => { if (!DEMO_MODE) refreshEntitlement().catch(() => {}); }); }, []);
   useEffect(() => { if (fonts && hydrated) SplashScreen.hideAsync().catch(() => {}); }, [fonts, hydrated]);
 
   if (!fonts || !hydrated) return <View style={{ flex: 1, backgroundColor: color.base }} />;

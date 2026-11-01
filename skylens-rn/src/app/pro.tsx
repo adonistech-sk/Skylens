@@ -15,10 +15,10 @@ import { useStore } from '../state/store';
 const TERMS = 'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/';
 
 const FEATURES: { icon: IconName; text: string }[] = [
-  { icon: 'layers', text: 'Advanced sky layers & deep sky catalog' },
-  { icon: 'calendar', text: 'Extended events & detailed forecasts' },
-  { icon: 'cube', text: 'AR sky & 3D solar system' },
-  { icon: 'bell', text: 'Custom alerts & observing planner' },
+  { icon: 'layers', text: 'The full deep sky catalog, 1,643 objects' },
+  { icon: 'moonRing', text: 'The complete Tonight list' },
+  { icon: 'calendar', text: 'Event calendar for any month' },
+  { icon: 'check', text: 'The live sky, search and AR stay free' },
 ];
 
 export default function Pro() {
