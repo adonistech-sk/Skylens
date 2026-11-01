@@ -106,17 +106,19 @@ public enum EventCalendar {
     }
 
     private static func moonPhases(_ start: Date, _ end: Date, _ observer: ObserverLocation) throws -> [SkyEvent] {
-        try Phenomena.lunarQuarters(from: start, to: end).map { q in
+        try Phenomena.lunarQuarters(from: start, to: end).map { q -> SkyEvent in
             let describe: String = switch q.quarter {
             case .new: "The Moon is lost in the Sun's glare. Dark skies make this the best time for faint objects."
             case .firstQuarter: "Half lit and high at sunset. Crater detail is strong along the terminator."
             case .full: "Fully lit and up all night. It is beautiful, and it drowns out faint objects."
             case .lastQuarter: "Half lit, rising around midnight and leaving the evening sky dark."
             }
+            let seconds = Int(q.date.timeIntervalSince1970)
+            let isSignificant = q.quarter == .full || q.quarter == .new
             return SkyEvent(
-                id: "moon-\(q.quarter.rawValue)-\(Int(q.date.timeIntervalSince1970))", kind: .moonPhase,
+                id: "moon-\(q.quarter.rawValue)-\(seconds)", kind: .moonPhase,
                 title: q.quarter.name, date: q.date, endDate: nil, detail: describe, source: .calculated,
-                visibility: .general, related: [.body(.moon)], isSignificant: q.quarter == .full || q.quarter == .new
+                visibility: .general, related: [.body(.moon)], isSignificant: isSignificant
             )
         }
     }
@@ -188,17 +190,22 @@ public enum EventCalendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         let first = calendar.component(.year, from: start), last = calendar.component(.year, from: end)
-        return try (first...max(first, last)).flatMap { try Phenomena.seasons(year: $0) }
-            .filter { $0.date >= start && $0.date <= end }
-            .map { s in
-                SkyEvent(
-                    id: "season-\(Int(s.date.timeIntervalSince1970))", kind: .season, title: s.name.rawValue, date: s.date,
-                    endDate: nil, detail: s.name == .marchEquinox || s.name == .septemberEquinox
-                        ? "Day and night are nearly equal, as the Sun crosses the celestial equator."
-                        : "The Sun reaches its farthest point from the celestial equator.",
-                    source: .calculated, visibility: .general, related: [.body(.sun)], isSignificant: false
-                )
+        var out: [SkyEvent] = []
+        for year in first...max(first, last) {
+            for s in try Phenomena.seasons(year: year) where s.date >= start && s.date <= end {
+                let isEquinox = s.name == .marchEquinox || s.name == .septemberEquinox
+                let detail: String = isEquinox
+                    ? "Day and night are nearly equal, as the Sun crosses the celestial equator."
+                    : "The Sun reaches its farthest point from the celestial equator."
+                let seconds = Int(s.date.timeIntervalSince1970)
+                out.append(SkyEvent(
+                    id: "season-\(seconds)", kind: .season, title: s.name.rawValue, date: s.date,
+                    endDate: nil, detail: detail, source: .calculated, visibility: .general,
+                    related: [.body(.sun)], isSignificant: false
+                ))
             }
+        }
+        return out
     }
 
     private static func oppositions(_ start: Date, _ end: Date, _ observer: ObserverLocation) throws -> [SkyEvent] {
