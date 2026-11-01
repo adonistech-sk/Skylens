@@ -20,7 +20,7 @@ The first build will probably fail with compile errors, because this app has nev
 ## 3. Make an API key so GitHub can sign and upload (about 5 minutes)
 
 1. [App Store Connect → Users and Access → Integrations → App Store Connect API](https://appstoreconnect.apple.com/access/integrations/api).
-2. Press **+** under Team Keys. Name it `GitHub`, access **App Manager**. Generate.
+2. Press **+** under Team Keys. Name it `GitHub`, access **Admin**, which automatic cloud signing needs in order to create distribution certificates. Generate.
 3. Write down the **Issuer ID** (top of the page) and the key's **Key ID**.
 4. **Download the API key**. You get `AuthKey_XXXXXXXXXX.p8`. Apple lets you download it only once, so keep it.
 5. Open the `.p8` file in Notepad. You'll need its whole text, including the BEGIN and END lines.

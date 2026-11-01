@@ -127,7 +127,7 @@ final class StoreService {
         model.setSubscription(await Self.lapsedStatus())
     }
 
-    private static func lapsedStatus() async -> SubscriptionStatus {
+    private static func lapsedStatus() async -> SkySession.SubscriptionStatus {
         guard let product = try? await Product.products(for: [monthlyID]).first,
               let statuses = try? await product.subscription?.status else { return .free }
         for status in statuses {

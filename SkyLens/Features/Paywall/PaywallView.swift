@@ -16,7 +16,7 @@ struct PaywallView: View {
     @State private var selection: Product.ID?
 
     private var store: StoreService { services.store }
-    private var status: SubscriptionStatus { services.model.subscription }
+    private var status: SkySession.SubscriptionStatus { services.model.subscription }
 
     var body: some View {
         ScrollView {
