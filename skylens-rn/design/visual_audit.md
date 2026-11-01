@@ -2,7 +2,7 @@
 
 **Baseline:** iPhone 17 Simulator, iOS 26.2, 402 × 874 pt @3x, from `.github/workflows/rn-ios.yml`. Fixed observer and clock (Bratislava, 2027-01-17 21:25 local), all values still calculated. Reference and screenshot are compared at the same height.
 
-**This audit covers commit `073ae42`.** Any later visual work must be recaptured before it can be claimed here.
+**This audit covers commit `787e800`, run 41326574682.** Frames and side-by-sides are in `design/ios-baseline/`. Any later visual work must be recaptured before it can be claimed here.
 
 The references are artificially proportioned concept art, about 0.58 wide-to-tall against 0.46 for a real iPhone, so screens are taller here by design. No score is given, because the rubric is qualitative.
 
@@ -14,10 +14,10 @@ The references are artificially proportioned concept art, about 0.58 wide-to-tal
 
 ## Screens
 
-| # | Reference | Screenshot (CI artifact `rn-screenshots`, run 41316456369) | Status | Remaining difference | Fixes made |
+| # | Reference | Screenshot (`design/ios-baseline/`) | Status | Remaining difference | Fixes made |
 |---|---|---|---|---|---|
-| 01 | `01_onboarding.png` | `01_onboarding.png` | Close, **recapture needed** | The Milky Way is faint where the reference has a vivid violet band. The run's frame caught iOS's link prompt; the prior run's frame was clean | Night side with real city lights; removed a band artifact; Newsreader Light |
-| 02 | `02_location.png` | `02_location.png` | Close, **recapture needed** | Real Tetons photo, so brighter sky and larger peaks than the illustration. Same prompt issue | Recropped and regraded twice |
+| 01 | `01_onboarding.png` | `01_onboarding.png` | Close | The Milky Way is faint where the reference has a vivid violet band | Night side with real city lights; removed a band artifact; Newsreader Light |
+| 02 | `02_location.png` | `02_location.png` | Close | Real Tetons photo, so brighter sky and larger peaks than the illustration | Recropped and regraded twice |
 | 03 | `03_sky_view.png` | `03_sky_view.png` | Close | Real geometry: Orion is about 18° tall, so it fills less of the frame than in the concept. The real winter Milky Way is fainter around Orion. Artwork is pinned to real stars, so its pose differs | Horizon, compass, label density, deep background, stale-frame blank fixed |
 | 04 | `04_object_detail_andromeda.png` | `04_object_detail_andromeda.png` | Close | The photo is much less vivid, because the vivid candidate has a disputed license. Data is real: 2.5 Mly and 3.0° × 1.1° | Graded hero, solid peach segment, two-line title |
 | 05 | `05_tonight.png` | `05_tonight.png` | Matched | Values are real for this date. A third row and a "complete list" link replace the second row | Real phase shader, Moon removed from the list |
