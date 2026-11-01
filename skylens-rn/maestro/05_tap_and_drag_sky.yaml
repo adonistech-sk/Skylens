@@ -16,7 +16,7 @@ appId: sk.skylens.app
     env:
       WAIT: 5000
 - tapOn:
-    point: "30%,31.5%"
+    point: "30%,32%"
 - extendedWaitUntil:
     visible:
       id: sky-selection
