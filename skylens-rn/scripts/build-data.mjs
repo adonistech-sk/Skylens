@@ -2,7 +2,7 @@
 // values are copied, never edited, so the two apps cannot disagree about the sky.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import { CELL_COUNT, cellOf, crc32, GRID_SIDE, PACK_DIRECTORY_ENTRY, PACK_HEADER, PACK_MAGIC, PACK_RECORD, PACK_VERSION, packRecordsOffset } from '../src/data/catalogs/grid.ts';
+import { CELL_COUNT, cellOf, crc32, GRID_SIDE, PACK_DIRECTORY_ENTRY, PACK_HEADER, PACK_MAGIC, PACK_RECORD, PACK_VERSION, packExtraOffset, packIndexOffset, packRecordsOffset } from '../src/data/catalogs/grid.ts';
 
 const res = new URL('../../Packages/SkyLensKit/Sources/SkyCatalog/Resources/', import.meta.url);
 const out = new URL('../src/data/generated/', import.meta.url);
@@ -40,7 +40,9 @@ fs.writeFileSync(new URL('stars.ts', out),
   `export const STARS_B64 = '${packed.toString('base64')}';\n`);
 
 const meta = fs.readFileSync(new URL('stars-meta.tsv', res), 'utf8').trim().split('\n').map((l) => l.split('\t'));
-const metaRows = meta.filter((f) => described.has(Number(f[0])) || f[1]).map((f) => [Number(f[0]), f[1] || 0, f[2] || 0, f[3] || 0, f[4] ? Number(f[4]) : 0, f[5] ? Number(f[5]) : 0, f[6] || 0]);
+// Stars outside the bundle keep their rows too, so a pack star with a name is found by it.
+const kept = (f) => described.has(Number(f[0])) || f[1] || !seen.has(Number(f[0]));
+const metaRows = meta.filter(kept).map((f) => [Number(f[0]), f[1] || 0, f[2] || 0, f[3] || 0, f[4] ? Number(f[4]) : 0, f[5] ? Number(f[5]) : 0, f[6] || 0]);
 const deep = fs.readFileSync(new URL('deepsky.tsv', res), 'utf8').trim().split('\n').map((l) => l.split('\t')).map((f) => [
   f[0], f[1] ? Number(f[1]) : 0, f[2] || 0, f[3], Number(f[4]), Number(f[5]), f[6] ? Number(f[6]) : null, f[7] ? Number(f[7]) : null, f[8] ? Number(f[8]) : null,
 ]);
@@ -66,9 +68,12 @@ for (let i = 0; i < n; i++) {
 }
 deepRows.sort((a, b) => a.cell - b.cell || a.mag - b.mag || a.o - b.o);
 const recordsAt = packRecordsOffset();
-const pack = Buffer.alloc(recordsAt + deepRows.length * PACK_RECORD);
+// Bundled stars fainter than META_LIMIT lose their designations from the bundle. Those values
+// travel with the pack, so search and detail can still reach them. Nothing is added or edited.
+const extra = Buffer.from(JSON.stringify(meta.filter((f) => !kept(f)).map((f) => [Number(f[0]), f[4] ? Number(f[4]) : 0, f[5] ? Number(f[5]) : 0, f[6] || 0])), 'utf8');
+const pack = Buffer.alloc(packExtraOffset(deepRows.length) + extra.length);
 pack.write(PACK_MAGIC, 0, 'latin1');
-[PACK_VERSION, deepRows.length, CELL_COUNT, GRID_SIDE, PACK_RECORD].forEach((v, i) => pack.writeUInt32LE(v, 4 + i * 4));
+[PACK_VERSION, deepRows.length, CELL_COUNT, GRID_SIDE, PACK_RECORD, extra.length, 0].forEach((v, i) => pack.writeUInt32LE(v, 4 + i * 4));
 const firstRow = new Uint32Array(CELL_COUNT + 1).fill(deepRows.length);
 for (let r = deepRows.length - 1; r >= 0; r--) firstRow[deepRows[r].cell] = r;
 for (let c = CELL_COUNT - 1; c >= 0; c--) firstRow[c] = Math.min(firstRow[c], firstRow[c + 1]);
@@ -85,6 +90,11 @@ for (let c = 0; c <= CELL_COUNT; c++) {
   pack.writeFloatLE(fastest, at + 4);
   pack.writeUInt32LE(crc32(pack.subarray(recordsAt + firstRow[c] * PACK_RECORD, recordsAt + firstRow[c + 1] * PACK_RECORD)), at + 8);
 }
+// Every pack star by HIP number, so one can be found without reading the whole pack.
+const byHip = deepRows.map((r) => ({ hip: bin.readUInt32LE(r.o), cell: r.cell })).sort((a, b) => a.hip - b.hip);
+const indexAt = packIndexOffset(deepRows.length);
+byHip.forEach((r, i) => { pack.writeUInt32LE(r.hip, indexAt + i * 4); pack.writeUInt16LE(r.cell, indexAt + deepRows.length * 4 + i * 2); });
+extra.copy(pack, packExtraOffset(deepRows.length));
 fs.mkdirSync(new URL('../assets/catalogs/', import.meta.url), { recursive: true });
 fs.writeFileSync(new URL('../assets/catalogs/hip-deep-v1.db', import.meta.url), pack);
 const deepMags = deepRows.map((r) => r.mag / 100);

@@ -1,6 +1,6 @@
-// Offline object search, ported from SkyCatalog/SearchIndex.swift: exact and prefix
-// matching over names and designations, with bounded edit distance so "betelguese"
-// finds Betelgeuse.
+// Offline object search over everything the app knows: names and designations through a word
+// index with bounded edit distance, so "betelguese" finds Betelgeuse, and catalog numbers
+// through sorted tables, so 118,217 HIP numbers cost a binary search rather than a scan.
 import { ALL_BODIES, bodyName } from '../astronomy/core';
 import { constellations, deepSky, genitiveOf, starMetaEntries, stars } from './catalog';
 
@@ -19,6 +19,7 @@ const BAYER: Record<string, string> = {
   alp: 'alpha', alf: 'alpha', bet: 'beta', gam: 'gamma', del: 'delta', eps: 'epsilon', zet: 'zeta', the: 'theta', tet: 'theta', iot: 'iota',
   kap: 'kappa', lam: 'lambda', omi: 'omicron', sig: 'sigma', ups: 'upsilon', ome: 'omega',
 };
+const BODY_ALIASES: Record<string, string[]> = { sun: ['Sol'], moon: ['Luna'] };
 
 /** "α Lyr" → "alpha lyr", "M 31" → "m31", "NGC224" → "ngc 224". */
 export function normalize(raw: string): string {
@@ -65,12 +66,16 @@ export function editDistance(a: string, b: string, limit: number): number | null
 
 function buildEntries(): Entry[] {
   const entries: Entry[] = [];
-  for (const b of ALL_BODIES) entries.push({ id: `body:${b}`, name: bodyName(b), aliases: [], category: 'Solar System', popularity: 100 });
+  for (const b of ALL_BODIES) entries.push({ id: `body:${b}`, name: bodyName(b), aliases: BODY_ALIASES[b] ?? [], category: 'Solar System', popularity: 100 });
   for (const c of constellations) entries.push({ id: `con:${c.id}`, name: c.name, aliases: [c.id, c.genitive], category: 'Constellations', popularity: 60 });
   const t = stars();
   for (const [hip, m] of starMetaEntries()) {
     const i = t.indexByHip.get(hip);
-    if (i === undefined) continue;
+    // A star outside the bundle is in the deep pack: only its name is worth a term here.
+    if (i === undefined) {
+      if (m.name) entries.push({ id: `star:${hip}`, name: m.name, aliases: [], category: 'Stars', popularity: 30 });
+      continue;
+    }
     const aliases: string[] = [];
     for (const d of [m.bayer, m.flamsteed]) {
       if (!d) continue;
@@ -79,9 +84,6 @@ function buildEntries(): Entry[] {
       const g = space > 0 ? genitiveOf(d.slice(space + 1)) : null;
       if (g) aliases.push(`${d.slice(0, space)} ${g}`);
     }
-    if (m.hr) aliases.push(`HR ${m.hr}`);
-    if (m.hd) aliases.push(`HD ${m.hd}`);
-    aliases.push(`HIP ${hip}`);
     entries.push({
       id: `star:${hip}`, name: m.name ?? m.bayer ?? m.flamsteed ?? `HIP ${hip}`, aliases, category: 'Stars',
       popularity: (m.name ? 40 : 0) + Math.max(0, 12 - t.mag[i]),
@@ -96,8 +98,19 @@ function buildEntries(): Entry[] {
   return entries;
 }
 
-let index: { entries: Entry[]; terms: Term[] } | null = null;
-function ensureIndex() {
+interface Index {
+  entries: Entry[];
+  terms: Term[];
+  /** Every distinct word, sorted, with the terms it appears in. */
+  words: string[];
+  postings: number[][];
+  /** Words eligible for typo matching, by length. */
+  fuzzy: Map<number, number[]>;
+}
+
+let index: Index | null = null;
+
+function ensureIndex(): Index {
   if (index) return index;
   const entries = buildEntries();
   const terms: Term[] = [];
@@ -110,21 +123,147 @@ function ensureIndex() {
     }
   });
   terms.sort((a, b) => (a.text < b.text ? -1 : a.text > b.text ? 1 : 0));
-  index = { entries, terms };
+  const byWord = new Map<string, number[]>();
+  terms.forEach((t, i) => { for (const w of new Set(t.words)) { const list = byWord.get(w); if (list) list.push(i); else byWord.set(w, [i]); } });
+  const words = [...byWord.keys()].sort();
+  const postings = words.map((w) => byWord.get(w)!);
+  const fuzzy = new Map<number, number[]>();
+  words.forEach((w, i) => {
+    if (w.length < 3 || !postings[i].some((k) => terms[k].primary || terms[k].text.length < 16)) return;
+    const list = fuzzy.get(w.length);
+    if (list) list.push(i); else fuzzy.set(w.length, [i]);
+  });
+  index = { entries, terms, words, postings, fuzzy };
   return index;
 }
 
+/** Builds the index ahead of the first keystroke. */
+export const prepareSearch = () => { ensureIndex(); numbers(); };
+
+// ---- Catalog numbers ----
+
+export type NumberKind = 'hip' | 'hd' | 'hr';
+interface NumberTable { keys: Uint32Array; hips: Uint32Array }
+
+const extraRows: [number, number, number][] = [];
+let deepHips: Uint32Array | null = null;
+let tables: Record<NumberKind, NumberTable> | null = null;
+
+/** Key and star in one number, because native sorting is far cheaper than a JS comparator. */
+const PAIR = 2 ** 18;
+
+function table(pairs: number[]): NumberTable {
+  const sorted = Float64Array.from(pairs).sort();
+  const keys = new Uint32Array(sorted.length), hips = new Uint32Array(sorted.length);
+  for (let i = 0; i < sorted.length; i++) {
+    keys[i] = Math.floor(sorted[i] / PAIR);
+    hips[i] = sorted[i] - keys[i] * PAIR;
+  }
+  return { keys, hips };
+}
+
+function numbers() {
+  if (tables) return tables;
+  const t = stars();
+  const base = deepHips?.length ?? 0;
+  const hip = new Uint32Array(t.count + base);
+  hip.set(t.hip, 0);
+  if (deepHips) hip.set(deepHips, t.count);
+  hip.sort();
+  const hd: number[] = [], hr: number[] = [];
+  for (const [h, m] of starMetaEntries()) {
+    if (m.hd) hd.push(m.hd * PAIR + h);
+    if (m.hr) hr.push(m.hr * PAIR + h);
+  }
+  for (const [h, r, d] of extraRows) {
+    if (d) hd.push(d * PAIR + h);
+    if (r) hr.push(r * PAIR + h);
+  }
+  tables = { hip: { keys: hip, hips: hip }, hd: table(hd), hr: table(hr) };
+  return tables;
+}
+
+/** Adds what the deep pack knows. Until then, search covers the bundled catalog. */
+export function installDeepSearch(hips: Uint32Array, extra: readonly (readonly [number, number, number, string | 0])[]) {
+  deepHips = hips;
+  extraRows.length = 0;
+  for (const [h, r, d] of extra) extraRows.push([h, r, d]);
+  tables = null;
+}
+
+export const deepSearchReady = () => deepHips !== null;
+
+function lowerBound(a: Uint32Array, v: number) {
+  let low = 0, high = a.length;
+  while (low < high) { const mid = (low + high) >> 1; if (a[mid] < v) low = mid + 1; else high = mid; }
+  return low;
+}
+
+/** Stars whose number is, or starts with, these digits, exact match first. */
+export function numberMatches(kind: NumberKind, digits: string, limit: number): { hip: number; key: number }[] {
+  const { keys, hips } = numbers()[kind];
+  const out: { hip: number; key: number }[] = [];
+  const n = Number(digits);
+  if (!Number.isSafeInteger(n) || (digits.length > 1 && digits[0] === '0')) return out;
+  for (let scale = 1; scale <= 1e7 && out.length < limit; scale *= 10) {
+    const from = n * scale, to = (n + 1) * scale;
+    for (let i = lowerBound(keys, from); i < keys.length && keys[i] < to && out.length < limit; i++) out.push({ hip: hips[i], key: keys[i] });
+  }
+  return out;
+}
+
+const NUMBER_LABEL: Record<NumberKind, string> = { hip: 'HIP', hd: 'HD', hr: 'HR' };
+
+/** The name a bare catalog number should show. */
+function starLabel(hip: number, entries: Map<string, Entry>) {
+  return entries.get(`star:${hip}`)?.name ?? `HIP ${hip}`;
+}
+
+let entryById: Map<string, Entry> | null = null;
+
+function searchNumber(kind: NumberKind, digits: string, limit: number, category?: Category): SearchResult[] {
+  if (category && category !== 'Stars') return [];
+  const { entries } = ensureIndex();
+  entryById ??= new Map(entries.map((e) => [e.id, e]));
+  const seen = new Set<number>();
+  const out: SearchResult[] = [];
+  for (const { hip, key } of numberMatches(kind, digits, limit)) {
+    if (seen.has(hip)) continue;
+    seen.add(hip);
+    const exact = String(key) === digits;
+    const name = starLabel(hip, entryById);
+    const display = `${NUMBER_LABEL[kind]} ${key}`;
+    out.push({ id: `star:${hip}`, name, matchedAlias: name === display ? null : display, category: 'Stars', score: exact ? 12 : 7 - Math.min(2, (String(key).length - digits.length) / 2) });
+  }
+  return out;
+}
+
+// ---- Search ----
+
+function wordRange(words: string[], q: string): [number, number] {
+  let low = 0, high = words.length;
+  while (low < high) { const mid = (low + high) >> 1; if (words[mid] < q) low = mid + 1; else high = mid; }
+  let end = low;
+  while (end < words.length && words[end].startsWith(q)) end++;
+  return [low, end];
+}
+
 /** Best first, empty for an empty query. */
-export function search(query: string, limit = 40): SearchResult[] {
+export function search(query: string, limit = 40, category?: Category): SearchResult[] {
   const q = normalize(query);
   if (!q) return [];
-  const { entries, terms } = ensureIndex();
+  const number = q.match(/^(hip|hd|hr) (\d+)$/);
+  if (number) return searchNumber(number[1] as NumberKind, number[2], limit, category);
+
+  const { entries, terms, words, postings, fuzzy } = ensureIndex();
   const best = new Map<number, { score: number; alias: string | null }>();
   const consider = (t: Term, base: number) => {
+    if (category && entries[t.entry].category !== category) return;
     const score = base + entries[t.entry].popularity / 100 + (t.primary ? 0.5 : 0);
     if (score > (best.get(t.entry)?.score ?? -1)) best.set(t.entry, { score, alias: t.primary ? null : t.display });
   };
 
+  // The whole term, from its start.
   let low = 0, high = terms.length;
   while (low < high) {
     const mid = (low + high) >> 1;
@@ -135,21 +274,35 @@ export function search(query: string, limit = 40): SearchResult[] {
     consider(t, t.text === q ? 10 : 7 - Math.min(2, (t.text.length - q.length) / 10));
   }
 
-  const words = q.split(' ');
-  for (const t of terms) {
-    if (words.length === 1) {
-      if (t.words.length > 1 && t.words.slice(1).some((w) => w.startsWith(q))) {
-        consider(t, 5);
-      } else if (q.length >= 4 && (t.primary || t.text.length < 16)) {
-        const allowed = q.length >= 7 ? 2 : 1;
-        for (const w of t.words) {
-          if (Math.abs(w.length - q.length) > allowed) continue;
-          const d = editDistance(q, w, allowed);
-          if (d !== null) { consider(t, 4 - d); break; }
+  const qWords = q.split(' ');
+  if (qWords.length === 1) {
+    // A later word of a longer name.
+    const [from, to] = wordRange(words, q);
+    for (let w = from; w < to; w++) {
+      for (const k of postings[w]) {
+        const t = terms[k];
+        if (t.words.length > 1 && t.words.slice(1).some((x) => x.startsWith(q))) consider(t, 5);
+      }
+    }
+    // A typo in any word.
+    if (q.length >= 4) {
+      const allowed = q.length >= 7 ? 2 : 1;
+      for (let len = q.length - allowed; len <= q.length + allowed; len++) {
+        for (const w of fuzzy.get(len) ?? []) {
+          const d = editDistance(q, words[w], allowed);
+          if (d === null) continue;
+          for (const k of postings[w]) { const t = terms[k]; if (t.primary || t.text.length < 16) consider(t, 4 - d); }
         }
       }
-    } else if (words.every((w) => t.words.some((x) => x.startsWith(w)))) {
-      consider(t, 6);
+    }
+  } else {
+    // Every word typed starts some word of the term, in any order.
+    const [from, to] = wordRange(words, qWords[0]);
+    for (let w = from; w < to; w++) {
+      for (const k of postings[w]) {
+        const t = terms[k];
+        if (qWords.every((x) => t.words.some((y) => y.startsWith(x)))) consider(t, 6);
+      }
     }
   }
 

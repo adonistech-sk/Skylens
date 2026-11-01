@@ -28,6 +28,9 @@ export interface StarProperties {
   flamsteed: string | null;
   hr: number | null;
   hd: number | null;
+  /** Milliarcseconds a year, with the RA rate already scaled by cos dec. */
+  pmRA: number;
+  pmDec: number;
 }
 
 export interface DeepSkyProperties {
@@ -139,6 +142,8 @@ export function directionAt(ra: number, dec: number, pmRA: number, pmDec: number
 
 export const starDirection = (t: StarTable, i: number, years: number): Vec3 => directionAt(t.ra[i], t.dec[i], t.pmRA[i], t.pmDec[i], years);
 
+export const yearsSinceJ2000 = (time: number) => (time - 946_728_000_000) / (365.25 * 86_400_000);
+
 /** Effective temperature (Ballesteros 2012), then Tanner Helland's Planckian fit. */
 export function starColor(bv: number): [number, number, number] {
   const c = Math.max(-0.4, Math.min(2, Number.isNaN(bv) ? 0.6 : bv));
@@ -203,10 +208,18 @@ export function constellationObject(c: ConstellationData): SkyObject {
 const deepStars = new Map<number, StarRow>();
 export const rememberDeepStar = (row: StarRow) => { deepStars.set(row.hip, row); };
 
+/** Designations the bundle leaves out, added once the deep pack has been read. */
+const extraMeta = new Map<number, { hr: number | null; hd: number | null; spectral: string | null }>();
+export function rememberStarMeta(rows: readonly (readonly [number, number, number, string | 0])[]) {
+  for (const [hip, hr, hd, spectral] of rows) extraMeta.set(hip, { hr: hr || null, hd: hd || null, spectral: spectral || null });
+}
+
 function deepStarObject(r: StarRow): SkyObject {
+  const m = starMeta.get(r.hip);
+  const labels = [m?.hr ? `HR ${m.hr}` : null, m?.hd ? `HD ${m.hd}` : null, m?.name ? `HIP ${r.hip}` : null].filter((l): l is string => !!l);
   return {
-    id: `star:${r.hip}`, type: 'star', name: `HIP ${r.hip}`, designations: [], position: { raHours: r.ra / 15, decDeg: r.dec }, magnitude: Math.round(r.mag * 100) / 100,
-    star: { hip: r.hip, spectralType: null, colorIndex: Number.isNaN(r.bv) ? null : r.bv, parallaxMas: r.parallax > 0 ? r.parallax : null, bayer: null, flamsteed: null, hr: null, hd: null },
+    id: `star:${r.hip}`, type: 'star', name: m?.name ?? `HIP ${r.hip}`, designations: labels, position: { raHours: r.ra / 15, decDeg: r.dec }, magnitude: Math.round(r.mag * 100) / 100,
+    star: { hip: r.hip, spectralType: m?.spectral ?? null, colorIndex: Number.isNaN(r.bv) ? null : r.bv, parallaxMas: r.parallax > 0 ? r.parallax : null, bayer: null, flamsteed: null, hr: m?.hr ?? null, hd: m?.hd ?? null, pmRA: r.pmRA, pmDec: r.pmDec },
   };
 }
 
@@ -215,11 +228,13 @@ export function starObject(hip: number): SkyObject | null {
   const i = t.indexByHip.get(hip);
   if (i === undefined) { const deep = deepStars.get(hip); return deep ? deepStarObject(deep) : null; }
   const m = starMeta.get(hip);
+  const x = extraMeta.get(hip);
+  const hr = m?.hr ?? x?.hr ?? null, hd = m?.hd ?? x?.hd ?? null, spectralType = m?.spectral ?? x?.spectral ?? null;
   const labels: string[] = [];
   if (m?.name && m.bayer) labels.push(m.bayer);
   if (m?.flamsteed) labels.push(m.flamsteed);
-  if (m?.hr) labels.push(`HR ${m.hr}`);
-  if (m?.hd) labels.push(`HD ${m.hd}`);
+  if (hr) labels.push(`HR ${hr}`);
+  if (hd) labels.push(`HD ${hd}`);
   labels.push(`HIP ${hip}`);
   const primary = m?.name ?? m?.bayer ?? m?.flamsteed ?? `HIP ${hip}`;
   return {
@@ -227,8 +242,8 @@ export function starObject(hip: number): SkyObject | null {
     position: { raHours: t.ra[i] / 15, decDeg: t.dec[i] },
     magnitude: Math.round(t.mag[i] * 100) / 100,
     star: {
-      hip, spectralType: m?.spectral ?? null, colorIndex: Number.isNaN(t.bv[i]) ? null : t.bv[i],
-      parallaxMas: t.parallax[i] > 0 ? t.parallax[i] : null, bayer: m?.bayer ?? null, flamsteed: m?.flamsteed ?? null, hr: m?.hr ?? null, hd: m?.hd ?? null,
+      hip, spectralType, colorIndex: Number.isNaN(t.bv[i]) ? null : t.bv[i],
+      parallaxMas: t.parallax[i] > 0 ? t.parallax[i] : null, bayer: m?.bayer ?? null, flamsteed: m?.flamsteed ?? null, hr, hd, pmRA: t.pmRA[i], pmDec: t.pmDec[i],
     },
   };
 }

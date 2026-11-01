@@ -103,3 +103,17 @@ On commit after `2cb0682`. Plans, audit and results are in `../docs/skylens-v1/`
 | Pinch and double tap about the fingers | Tested web, Tested logic. **Not tested on iOS** |
 | Rollback in More → Sky engine | Tested web |
 | Frame time, memory, battery on an iPhone | **Blocked:** needs a device |
+
+## SkyLens V1 Stage 2
+
+Web and logic evidence unless stated. **No iOS run.** Results and iOS risks are in `../docs/skylens-v1/V1_STAGE2_REPORT.md`.
+
+| Area | Status |
+|---|---|
+| Sky panel, three detents | Tested web, Tested logic. iOS gestures unproven |
+| Universal search, 118,217 stars | Tested logic, Tested web |
+| Selection card, long press, step arrows | Tested web |
+| Rich object detail, altitude chart, related objects | Tested web, Tested logic |
+| Find in Sky with moving targets and directions | Tested logic, Tested web. Compass untested |
+| Contextual discovery | Tested logic, Tested web |
+| Lists | Tested web, Tested logic |

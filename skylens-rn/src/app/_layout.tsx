@@ -13,6 +13,7 @@ import { restoreDeepFavorites } from '../data/catalogs/runtime';
 import { color } from '../design/tokens';
 import { refreshEntitlement } from '../features/subscription/iap';
 import { DEMO_MODE } from '../state/demo';
+import { allListItems } from '../state/lists';
 import { bumpCatalog, getState, hydrate, useStore } from '../state/store';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -32,7 +33,7 @@ export default function RootLayout() {
   useEffect(() => { hydrate().then(() => { if (!DEMO_MODE) refreshEntitlement().catch(() => {}); }); }, []);
   useEffect(() => { if (fonts && hydrated) SplashScreen.hideAsync().catch(() => {}); }, [fonts, hydrated]);
   useEffect(() => {
-    if (hydrated) restoreDeepFavorites(getState().favorites, (id) => object(id) !== null).then((changed) => { if (changed) bumpCatalog(); }).catch(() => {});
+    if (hydrated) restoreDeepFavorites([...getState().favorites, ...allListItems(getState().lists), ...getState().recents], (id) => object(id) !== null).then((changed) => { if (changed) bumpCatalog(); }).catch(() => {});
   }, [hydrated]);
 
   if (!fonts || !hydrated) return <View style={{ flex: 1, backgroundColor: color.base }} />;
@@ -50,6 +51,7 @@ export default function RootLayout() {
             <Stack.Screen name="ar" options={{ animation: 'fade' }} />
             <Stack.Screen name="location-search" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="sky-engine" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="list/[id]" options={{ animation: 'slide_from_right' }} />
           </Stack>
         </ScreenshotInsets>
       </SafeAreaProvider>

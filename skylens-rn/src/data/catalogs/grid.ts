@@ -86,10 +86,15 @@ export function crc32(bytes: Uint8Array): number {
 }
 
 export const PACK_MAGIC = 'SKP1';
-export const PACK_VERSION = 1;
+export const PACK_VERSION = 2;
 export const PACK_RECORD = 28;
-/** Magic, version, star count, cell count, grid side, record size. */
-export const PACK_HEADER = 24;
+/** Magic, version, star count, cell count, grid side, record size, extra bytes, reserved. */
+export const PACK_HEADER = 32;
 /** Per cell: first row, then maximum proper motion, then CRC-32 of its records. */
 export const PACK_DIRECTORY_ENTRY = 12;
 export const packRecordsOffset = () => PACK_HEADER + PACK_DIRECTORY_ENTRY * (CELL_COUNT + 1);
+/** After the records: every HIP number in order, then the cell each one lives in. */
+export const packIndexOffset = (stars: number) => packRecordsOffset() + stars * PACK_RECORD;
+export const packIndexBytes = (stars: number) => stars * 6;
+/** Then UTF-8 JSON of [hip, hr, hd, spectral] for bundled stars the app bundle leaves bare. */
+export const packExtraOffset = (stars: number) => packIndexOffset(stars) + packIndexBytes(stars);

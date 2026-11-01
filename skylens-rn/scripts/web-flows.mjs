@@ -15,6 +15,7 @@ const browser = await chromium.launch({
 const ctx = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 2 });
 const results = [];
 const flow = async (name, fn) => {
+  if (process.env.ONLY && !name.includes(process.env.ONLY)) return;
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e).slice(0, 200)));
@@ -109,7 +110,8 @@ await flow('daytime sky offers a labelled night preview without moving the clock
   await p.waitForTimeout(3000);
   await p.screenshot({ path: path.join(out, 'sky-night-preview.png') });
   await id(p, 'sky-time').click();
-  await visible(text(p, '13:25'));
+  // The sky stays mounted behind Time Travel, so its own clock text is the first match.
+  await visible(p.getByText('13:25', { exact: false }).last());
 });
 
 await flow('a typo still finds the star', async (p) => {
@@ -445,6 +447,281 @@ await flow('Sky engine switches return the original path and hide the modes', as
   if (await id(p, 'segment-atlas').count()) throw new Error('the switch is still there');
   await p.screenshot({ path: path.join(out, 'flags-off.png') });
   void before;
+});
+
+// ---- Stage 2: the panel, universal search, selection, detail and lists ----
+
+const viewOf = (p) => probe(p, () => globalThis.__skyProbe.view());
+const same = (a, b) => Math.abs(a.azimuth - b.azimuth) < 0.01 && Math.abs(a.altitude - b.altitude) < 0.01 && Math.abs(a.fov - b.fov) < 0.01;
+const hold = async (p, x, y, ms = 650) => { await p.mouse.move(x, y); await p.mouse.down(); await p.waitForTimeout(ms); await p.mouse.up(); };
+
+await flow('the panel opens to half and full by tap and by drag, and leaves the sky as it was', async (p) => {
+  await skyReady(p);
+  const before = await viewOf(p);
+  await id(p, 'sheet-handle').click();
+  await visible(id(p, 'sheet-discovery'));
+  await p.waitForTimeout(600);
+  await id(p, 'sheet-grabber').click();
+  await visible(text(p, 'Best tonight'));
+  await id(p, 'sheet-close').click();
+  await p.waitForTimeout(700);
+  await visible(id(p, 'sheet-handle'));
+  // A real drag upward from the handle.
+  const b = await id(p, 'sheet-handle').boundingBox();
+  await p.mouse.move(b.x + 150, b.y + 20);
+  await p.mouse.down();
+  await p.mouse.move(b.x + 150, b.y - 280, { steps: 14 });
+  await p.mouse.up();
+  await p.waitForTimeout(800);
+  await visible(id(p, 'sheet-discovery'));
+  if (!same(before, await viewOf(p))) throw new Error('the sky moved under the panel');
+});
+
+await flow('half open, the sky still pans, the list follows it, and a tap on the sky closes the panel', async (p) => {
+  await skyReady(p);
+  await id(p, 'sheet-handle').click();
+  await p.waitForTimeout(2200);
+  const first = await id(p, 'sheet-discovery').innerText();
+  const before = await viewOf(p);
+  await p.mouse.move(300, 200);
+  await p.mouse.down();
+  await p.mouse.move(40, 200, { steps: 10 });
+  await p.mouse.up();
+  await p.waitForTimeout(3600);
+  if (same(before, await viewOf(p))) throw new Error('the sky did not pan');
+  if (first === await id(p, 'sheet-discovery').innerText()) throw new Error('the list did not follow the view');
+  // Either the tap found an object, which shows its card, or it found empty sky.
+  await p.mouse.click(200, 120);
+  await p.waitForTimeout(800);
+  await visible(id(p, 'sheet-handle').or(id(p, 'sky-selection')));
+  await p.waitForTimeout(500);
+  const opacity = await id(p, 'sky-sheet').evaluate((el) => getComputedStyle(el).opacity);
+  if (Number(opacity) > 0.01) throw new Error(`the panel stayed open: opacity ${opacity}`);
+});
+
+await flow('every action in the panel goes somewhere real', async (p) => {
+  await skyReady(p);
+  const openPanel = async () => { await id(p, 'sheet-handle').click(); await visible(id(p, 'sheet-time')); };
+  await openPanel();
+  await id(p, 'sheet-time').click();
+  await visible(id(p, 'tt-forward'));
+  await id(p, 'tt-close').click();
+  await visible(id(p, 'sheet-time'));
+  await id(p, 'sheet-location').click();
+  await visible(id(p, 'choose-manually'));
+  await p.goBack();
+  await visible(id(p, 'sheet-layers'));
+  await id(p, 'sheet-layers').click();
+  await visible(id(p, 'sky-layers-panel'));
+  await id(p, 'sky-layers').click();
+  await openPanel();
+  await id(p, 'sheet-lists').click();
+  await visible(text(p, 'Favorites'));
+});
+
+await flow('universal search: a pack star, then the card, then Deep Atlas, with the star really drawn', async (p) => {
+  await skyReady(p);
+  await id(p, 'sheet-handle').click();
+  await id(p, 'sheet-search').click();
+  await id(p, 'sheet-search').fill('HIP 87937');
+  await visible(p.getByTestId("result-Barnard's Star"));
+  await p.getByTestId("result-Barnard's Star").click();
+  await visible(id(p, 'sky-show-atlas'));
+  await visible(text(p, 'below the horizon'));
+  await id(p, 'sky-show-atlas').click();
+  await p.waitForTimeout(2500);
+  const c = await starAt(p, 'star:87937');
+  if (Math.hypot(c.x - 196.5, c.y - 426) > 4) throw new Error(`not centred: ${JSON.stringify(c)}`);
+  const limit = await probe(p, () => globalThis.__skyProbe.limit());
+  if (limit < 9.54) throw new Error(`the view draws to V ${limit}, not the star`);
+  await p.waitForTimeout(600);
+  if (await id(p, 'sky-show-atlas').count()) throw new Error('still reported too faint');
+});
+
+await flow('search categories, typos, numbers and recents', async (p) => {
+  await open(p, 'search');
+  await id(p, 'search-input').fill('orion');
+  await visible(id(p, 'result-Orion Nebula'));
+  await id(p, 'chip-Deep Sky').click();
+  await p.waitForTimeout(400);
+  if (await id(p, 'result-Betelgeuse').count()) throw new Error('the category did not filter');
+  await id(p, 'chip-All').click();
+  await id(p, 'search-input').fill('HD 39801');
+  await visible(id(p, 'result-Betelgeuse'));
+  await id(p, 'search-input').fill('HIP 120000');
+  await visible(text(p, 'Nothing matches'));
+  await id(p, 'search-input').fill('siirus');
+  await visible(id(p, 'result-Sirius'));
+  await id(p, 'result-Sirius').click();
+  await visible(id(p, 'find-in-sky'));
+  await p.goBack();
+  await id(p, 'search-input').fill('');
+  await visible(id(p, 'search-recents'));
+  await visible(text(p, 'Sirius'));
+});
+
+{
+  const page = await ctx.newPage();
+  await page.route('**/*hip-deep-v1*', (r) => r.abort());
+  try {
+    await open(page, 'search');
+    await id(page, 'search-input').fill('Betelgeuse');
+    await visible(id(page, 'result-Betelgeuse'));
+    await visible(text(page, 'could not be read'));
+    await open(page, 'object/star:87937');
+    await visible(text(page, "isn't in the catalog"), 30000);
+    results.push(['PASS', 'with no deep pack, search keeps working and says what is missing']);
+  } catch (e) { results.push(['FAIL', 'with no deep pack, search keeps working and says what is missing', String(e).slice(0, 240)]); }
+  await page.close();
+}
+
+await flow('a long press opens the menu without selecting, and a tap is still a tap', async (p) => {
+  await skyReady(p);
+  const before = await viewOf(p);
+  await hold(p, 284, 493);
+  await visible(id(p, 'sky-menu'));
+  await visible(id(p, 'sky-menu-Rigel'));
+  await visible(text(p, 'RA '));
+  if (await id(p, 'sky-selection').count()) throw new Error('a long press selected something');
+  if (!same(before, await viewOf(p))) throw new Error('the long press moved the sky');
+  await id(p, 'sky-menu-backdrop').click({ position: { x: 20, y: 300 } });
+  await p.waitForTimeout(300);
+  if (await id(p, 'sky-menu').count()) throw new Error('the menu did not close');
+  await hold(p, 284, 493);
+  await id(p, 'sky-menu-Rigel').click();
+  await visible(id(p, 'sky-selection'));
+  await visible(text(p, 'Rigel'));
+  await id(p, 'sky-deselect').click();
+  await id(p, 'sky-canvas').click({ position: { x: 284, y: 493 } });
+  await p.waitForTimeout(500);
+  await visible(id(p, 'sky-selection'));
+  if (await id(p, 'sky-menu').count()) throw new Error('a tap opened the menu');
+});
+
+await flow('a long press then a drag pans, and Center here centres that point', async (p) => {
+  await skyReady(p);
+  await hold(p, 150, 300);
+  await visible(id(p, 'sky-menu'));
+  const before = await viewOf(p);
+  await id(p, 'sky-menu-centre').click();
+  await p.waitForTimeout(1000);
+  if (same(before, await viewOf(p))) throw new Error('Center here did nothing');
+  const after = await viewOf(p);
+  await p.mouse.move(250, 300);
+  await p.mouse.down();
+  await p.mouse.move(120, 280, { steps: 8 });
+  await p.mouse.up();
+  await p.waitForTimeout(800);
+  if (same(after, await viewOf(p))) throw new Error('a drag after the menu did not pan');
+});
+
+await flow('the arrows step through what is in view, and a name selects a constellation', async (p) => {
+  await skyReady(p);
+  await id(p, 'sky-canvas').click({ position: { x: 284, y: 493 } });
+  await visible(id(p, 'sky-next'));
+  const first = await id(p, 'sky-selection').getAttribute('aria-label');
+  await id(p, 'sky-next').click();
+  await p.waitForTimeout(1200);
+  const second = await id(p, 'sky-selection').getAttribute('aria-label');
+  if (first === second) throw new Error('the arrow did not change the selection');
+  await id(p, 'sky-prev').click();
+  await p.waitForTimeout(1200);
+  if (first !== await id(p, 'sky-selection').getAttribute('aria-label')) throw new Error('back did not return');
+  await id(p, 'sky-deselect').click();
+  await p.reload({ waitUntil: 'load' });
+  await visible(id(p, 'sheet-handle'));
+  await p.waitForTimeout(7000);
+  await id(p, 'sky-canvas').click({ position: { x: 125, y: 421 } });
+  await visible(text(p, 'Constellation ·'));
+});
+
+await flow('a list is made from the sky, survives a reload, reorders, and deletes', async (p) => {
+  await open(p, '', false);
+  await p.evaluate(() => localStorage.clear());
+  await open(p, '', false);
+  await id(p, 'get-started').click();
+  await id(p, 'choose-manually').click();
+  await id(p, 'city-Bratislava').click();
+  await visible(id(p, 'sheet-handle'));
+  await open(p, 'object/star:27989', false);
+  await visible(id(p, 'detail-list'));
+  await id(p, 'detail-list').click();
+  await id(p, 'list-new-name').fill('Winter targets');
+  await id(p, 'list-create').click();
+  await visible(id(p, 'list-toggle-Winter targets'));
+  await id(p, 'list-done').click();
+  await open(p, 'object/dso:M42', false);
+  await visible(id(p, 'detail-list'));
+  await id(p, 'detail-list').click();
+  await id(p, 'list-toggle-Winter targets').click();
+  await id(p, 'list-done').click();
+  await p.waitForTimeout(600);
+  await open(p, 'favorites', false);
+  await p.getByRole('tab', { name: 'Lists' }).click();
+  await visible(text(p, '2 objects'));
+  await id(p, 'list-Winter targets').click();
+  await visible(id(p, 'list-item-Betelgeuse'));
+  await visible(id(p, 'list-item-Orion Nebula'));
+  const order = async () => (await p.locator('body').innerText()).search('Betelgeuse') < (await p.locator('body').innerText()).search('Orion Nebula');
+  if (!await order()) throw new Error('wrong starting order');
+  await p.getByRole('button', { name: 'Move Betelgeuse down' }).click();
+  await p.waitForTimeout(300);
+  if (await order()) throw new Error('reorder did nothing');
+  await p.reload({ waitUntil: 'load' });
+  await visible(id(p, 'list-item-Betelgeuse'));
+  if (await order()) throw new Error('the order did not survive a reload');
+  await id(p, 'list-item-Orion Nebula').click();
+  await visible(id(p, 'find-in-sky'));
+  await p.goBack();
+  await visible(id(p, 'list-delete'));
+  await id(p, 'list-delete').click();
+  await id(p, 'list-delete').click();
+  await p.waitForTimeout(500);
+  const stored = await p.evaluate(() => localStorage.getItem('skylens.user.v1'));
+  if (JSON.parse(stored).lists.length !== 0) throw new Error('the list was not deleted');
+});
+
+await flow('object detail: real facts per type, a chart, related objects, and a wrong ID', async (p) => {
+  await open(p, 'object/star:24436');
+  await visible(id(p, 'detail-related'));
+  await p.getByRole('tab', { name: 'Observing' }).click();
+  await visible(id(p, 'altitude-chart'));
+  await visible(text(p, 'Highest'));
+  await p.getByRole('tab', { name: 'Details' }).click();
+  await visible(text(p, 'Galactic longitude'));
+  await visible(text(p, 'Absolute magnitude'));
+  const body = await p.locator('body').innerText();
+  if (/NaN|undefined|null/.test(body)) throw new Error('a missing value reached the screen');
+  await open(p, 'object/star:87937');
+  await visible(id(p, 'find-in-sky'), 30000);
+  await visible(text(p, "Barnard's Star"));
+  await open(p, 'object/con:Ori');
+  await visible(id(p, 'find-in-sky'));
+  await p.getByRole('tab', { name: 'Details' }).click();
+  await visible(text(p, 'square degrees'));
+  await open(p, 'object/star:1234567');
+  await visible(text(p, "isn't in the catalog"), 30000);
+});
+
+await flow('coming back from a detail page returns the same sky, time, mode and selection', async (p) => {
+  await skyReady(p);
+  await id(p, 'segment-atlas').click();
+  await p.mouse.move(300, 300);
+  await p.mouse.down();
+  await p.mouse.move(200, 330, { steps: 8 });
+  await p.mouse.up();
+  await p.waitForTimeout(2600);
+  await id(p, 'sky-canvas').click({ position: { x: 196, y: 400 } });
+  await visible(id(p, 'sky-selection'));
+  await p.waitForTimeout(1200);
+  const before = await viewOf(p), label = await id(p, 'sky-selection').getAttribute('aria-label');
+  await id(p, 'sky-selection').click();
+  await visible(id(p, 'find-in-sky'));
+  await p.locator('[aria-label="Back"]').first().click();
+  await visible(id(p, 'sky-selection'));
+  await p.waitForTimeout(800);
+  if (!same(before, await viewOf(p))) throw new Error('the view changed');
+  if (label !== await id(p, 'sky-selection').getAttribute('aria-label')) throw new Error('the selection changed');
 });
 
 await browser.close();

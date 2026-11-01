@@ -2,7 +2,7 @@
 // time, and the cache is bounded, so no zoom or pan can make memory grow without limit.
 // A pack that can't be read is a state to report, never a crash: the bundled stars carry on.
 import { Vec3 } from '../../astronomy/core';
-import { CELL_COUNT, crc32, GRID_SIDE, PACK_DIRECTORY_ENTRY, PACK_HEADER, PACK_MAGIC, PACK_RECORD, packRecordsOffset } from './grid';
+import { CELL_COUNT, crc32, GRID_SIDE, PACK_DIRECTORY_ENTRY, PACK_HEADER, PACK_MAGIC, PACK_RECORD, PACK_VERSION, packExtraOffset, packIndexBytes, packIndexOffset, packRecordsOffset } from './grid';
 
 /** Where a pack's bytes come from, so one reader serves the file system, a CDN or a test. */
 export interface PackStorage {
@@ -31,6 +31,16 @@ export interface StarTile {
 }
 
 export type PackStatus = 'closed' | 'opening' | 'ready' | 'failed';
+
+/** Star numbers in the pack, for finding one without reading the rest. */
+export interface PackIndex {
+  /** Sorted. */
+  hips: Uint32Array;
+  /** The sky cell of each entry in hips. */
+  cells: Uint16Array;
+  /** [hip, hr, hd, spectral] for bundled stars whose designations stayed out of the bundle. */
+  extra: [number, number, number, string | 0][];
+}
 
 export interface DeepPackOptions {
   /** Stars kept decoded. Older tiles are dropped past this. */
@@ -82,6 +92,8 @@ export class DeepPack {
   badTiles = 0;
 
   private storage: PackStorage | null = null;
+  private extraBytes = 0;
+  private indexRead: Promise<PackIndex | null> | null = null;
   private firstRow = new Uint32Array(CELL_COUNT + 1);
   private fastestMas = new Float32Array(CELL_COUNT);
   private crc = new Uint32Array(CELL_COUNT);
@@ -115,8 +127,10 @@ export class DeepPack {
       const v = view(head);
       const magic = String.fromCharCode(head[0], head[1], head[2], head[3]);
       if (magic !== PACK_MAGIC) throw new Error(`Not a star pack: ${magic}`);
+      if (v.getUint32(4, true) !== PACK_VERSION) throw new Error('Pack version does not match this build');
       if (v.getUint32(12, true) !== CELL_COUNT || v.getUint32(16, true) !== GRID_SIDE || v.getUint32(20, true) !== PACK_RECORD) throw new Error('Pack layout does not match this build');
       this.stars = v.getUint32(8, true);
+      this.extraBytes = v.getUint32(24, true);
       for (let c = 0; c <= CELL_COUNT; c++) {
         const at = PACK_HEADER + c * PACK_DIRECTORY_ENTRY;
         this.firstRow[c] = v.getUint32(at, true);
@@ -200,19 +214,52 @@ export class DeepPack {
     }
   }
 
-  /** Looks stars up anywhere in the pack, for saved favorites. Reads the whole pack once. */
-  async find(hips: Set<number>): Promise<StarRow[]> {
+  /** The star numbers, read once. Null if the pack can't be used. */
+  index(): Promise<PackIndex | null> {
+    this.indexRead ??= this.readIndex().catch(() => { this.indexRead = null; return null; });
+    return this.indexRead;
+  }
+
+  private async readIndex(): Promise<PackIndex | null> {
     if (this.status === 'closed') await this.start();
-    if (this.status !== 'ready' || !this.storage) return [];
-    const bytes = await this.storage.read(packRecordsOffset(), this.stars * PACK_RECORD);
+    if (this.status !== 'ready' || !this.storage) return null;
+    const bytes = await this.storage.read(packIndexOffset(this.stars), packIndexBytes(this.stars));
     const v = view(bytes);
+    const hips = new Uint32Array(this.stars), cells = new Uint16Array(this.stars);
+    for (let i = 0; i < this.stars; i++) {
+      hips[i] = v.getUint32(i * 4, true);
+      cells[i] = v.getUint16(this.stars * 4 + i * 2, true);
+    }
+    let extra: PackIndex['extra'] = [];
+    if (this.extraBytes) {
+      const raw = await this.storage.read(packExtraOffset(this.stars), this.extraBytes);
+      // Pure ASCII, as a test holds it to be, so no decoder is needed.
+      let text = '';
+      for (let i = 0; i < raw.length; i += 8192) text += String.fromCharCode(...raw.subarray(i, i + 8192));
+      extra = JSON.parse(text);
+    }
+    return { hips, cells, extra };
+  }
+
+  /** Reads stars by number, wherever they are, through the tiles that hold them. */
+  async find(hips: Set<number>): Promise<StarRow[]> {
+    const index = await this.index();
+    if (!index) return [];
     const out: StarRow[] = [];
-    for (let i = 0; i < this.stars && out.length < hips.size; i++) {
-      const o = i * PACK_RECORD;
-      const hip = v.getUint32(o, true);
-      if (!hips.has(hip)) continue;
-      const c = v.getInt16(o + 26, true);
-      out.push({ hip, ra: v.getFloat32(o + 4, true), dec: v.getFloat32(o + 8, true), pmRA: v.getFloat32(o + 12, true), pmDec: v.getFloat32(o + 16, true), parallax: v.getFloat32(o + 20, true), mag: v.getInt16(o + 24, true) / 100, bv: c === -32768 ? NaN : c / 1000 });
+    const cells = new Map<number, Set<number>>();
+    for (const hip of hips) {
+      let low = 0, high = index.hips.length - 1;
+      while (low < high) { const mid = (low + high) >> 1; if (index.hips[mid] < hip) low = mid + 1; else high = mid; }
+      if (index.hips[low] !== hip) continue;
+      const cell = index.cells[low];
+      if (!cells.has(cell)) cells.set(cell, new Set());
+      cells.get(cell)!.add(hip);
+    }
+    for (const [cell, wanted] of cells) {
+      let t = this.tiles.get(cell);
+      if (!t) { await this.load(cell); t = this.tiles.get(cell); this.evict(); }
+      if (!t) continue;
+      for (let i = 0; i < t.count; i++) if (wanted.has(t.hip[i])) out.push(rowOfTile(t, i));
     }
     return out;
   }
@@ -225,6 +272,7 @@ export class DeepPack {
     this.loaded = 0;
     this.queue = [];
     this.queued.clear();
+    this.indexRead = null;
   }
 }
 

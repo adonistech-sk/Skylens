@@ -63,13 +63,17 @@ export const pointsPerDegree = (c: Camera) => (cameraScale(c) / 2) * DEG;
 
 export interface ViewState extends Horizontal { fov: number }
 
+/** How far down the view can look. With no ground drawn, the whole sky is open to it. */
+export const LOWEST_VIEW = -20;
+export const lowestView = (ground: boolean) => (ground ? LOWEST_VIEW : -89);
+
 /** The sky follows the finger. Only altitude clamps: past the zenith the view would flip. */
-export function dragView(v: ViewState, dx: number, dy: number, perDegree: number): ViewState {
+export function dragView(v: ViewState, dx: number, dy: number, perDegree: number, lowest = LOWEST_VIEW): ViewState {
   const cosine = Math.max(Math.cos(v.altitude * DEG), 0.05);
   return {
     ...v,
     azimuth: normalize360(v.azimuth - dx / perDegree / cosine),
-    altitude: Math.min(89.9, Math.max(-20, v.altitude + dy / perDegree)),
+    altitude: Math.min(89.9, Math.max(lowest, v.altitude + dy / perDegree)),
   };
 }
 
@@ -78,7 +82,7 @@ export function dragView(v: ViewState, dx: number, dy: number, perDegree: number
  * Azimuth and altitude don't map linearly onto the screen away from its centre, so this
  * closes in over a few passes.
  */
-export function anchorView(v: ViewState, target: Vec3, x: number, y: number, width: number, height: number, projection: Projection): ViewState {
+export function anchorView(v: ViewState, target: Vec3, x: number, y: number, width: number, height: number, projection: Projection, lowest = LOWEST_VIEW): ViewState {
   const goal = vectorHorizontal(target);
   let next = v;
   for (let i = 0; i < 10; i++) {
@@ -86,11 +90,23 @@ export function anchorView(v: ViewState, target: Vec3, x: number, y: number, wid
     // Azimuth loses its meaning at the zenith, so only altitude steers there.
     const turn = Math.abs(goal.altitude) > 88 || Math.abs(now.altitude) > 88 ? 0 : normalize180(goal.azimuth - now.azimuth);
     const tilt = goal.altitude - now.altitude;
-    next = { ...next, azimuth: normalize360(next.azimuth + turn), altitude: Math.min(89.9, Math.max(-20, next.altitude + tilt)) };
+    next = { ...next, azimuth: normalize360(next.azimuth + turn), altitude: Math.min(89.9, Math.max(lowest, next.altitude + tilt)) };
     if (Math.abs(turn) + Math.abs(tilt) < 0.001) break;
   }
   return next;
 }
+
+/**
+ * Where a flight to a direction ends. The view can look nearly straight up, and it can follow
+ * a target below the horizon only as far as the ground allows, so Find in Sky never parks a
+ * target off-centre without a reason.
+ */
+export function focusView(target: Horizontal, from: ViewState, ground: boolean, fov = Math.min(from.fov, 60)): ViewState {
+  return { azimuth: target.azimuth, altitude: Math.min(89, Math.max(ground ? -5 : lowestView(false), target.altitude)), fov };
+}
+
+/** Field of view that frames a constellation's figure. */
+export const framingFov = (span: number) => Math.min(100, Math.max(24, span * 2.7));
 
 /** Longer flights take longer, within limits that keep the sky feeling direct. */
 export const flightDuration = (angle: number, reduceMotion: boolean) => (reduceMotion ? 0 : Math.min(1.4, 0.45 + angle / 180));

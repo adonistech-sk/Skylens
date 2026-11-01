@@ -25,6 +25,14 @@ Conflicts between the documents and the repository, each with its resolution. Ro
 | 19 | Concept art shows sample figures such as "2024 YR4 140 m" | Nothing copied from it | The pack marks them as invented |
 | 20 | Pack read in one go or by tile | By tile, through a storage interface with a bounded cache | Meets "loads incrementally" and leaves the door open for downloadable packs |
 | 21 | At tight zoom the coarse Milky Way map swells bright-star traces into soft blobs, which read as fake nebulae | Deep Atlas fades the map out between 20° and 6°. Explore keeps it | "Avoid fake bright nebula positions", and Explore must stay as approved |
+| 22 | Sky panel collapsed state could sit at the screen edge or above the compass | A slim row above the compass dome, replaced by the selection card when something is selected | The controls and dome stay where they were approved. The home indicator zone can't take a grab handle |
+| 23 | One selection card or two | One component, mounted in one place at a time | The brief says not to duplicate it, and two copies would be read twice by VoiceOver |
+| 24 | Should a tap on the sky with the panel half open select or only close | It does both | The sky stays live at half, and a tap on an object is the clearest intent |
+| 25 | Interpreted "navigation arrows" | The off-screen guide on the sky, plus step arrows on the card through objects in view | Both readings are useful, and the stepping list is frozen for a run so back returns |
+| 26 | The search index could hold every catalog number as a term | Numbers live in sorted typed arrays, names in a word index | 118,217 numbers would cost Hermes real time on every keystroke |
+| 27 | A pack star has no HD number or name in the source | Search reaches it by HIP number, and the 43 that have names by name | Aliases can't be invented |
+| 28 | The view stopped at −20° even with no ground drawn | With ground off the view reaches −89° | Find in Sky has to centre a star below the horizon in Deep Atlas |
+| 29 | Panel drag on the UI thread or the JS thread | JS thread, like the existing sky gestures | Safer without device testing. Revisit if the device test shows lag |
 
 ## Features at risk, and how they are protected
 
@@ -41,6 +49,7 @@ Conflicts between the documents and the repository, each with its resolution. Ro
 
 | Item | Why it is yours | Effect while open |
 |---|---|---|
+| Moon Atlas imagery source | LROC is recorded as restricted in `ASSET_CREDITS.md`, and the audit calls it conditional | Needed before Stage 3 can ship a Moon map |
 | Hipparcos commercial terms | Legal judgment | Pack and base stars stay in place, release gate open |
 | NGC 2000.0 | Legal judgment, highest priority | No deep-sky expansion. Fallback is OpenNGC, with share-alike review |
 | Meteor shower values from the IMO list | Facts or protected compilation | Stays as shipped, noted in the matrix |

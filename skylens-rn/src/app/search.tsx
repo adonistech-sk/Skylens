@@ -1,21 +1,23 @@
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { object } from '../data/catalog';
-import { search } from '../data/search';
-import { IconButton, Row } from '../design/components';
+import { Category } from '../data/search';
+import { IconButton, Notice, Row } from '../design/components';
 import { Icon } from '../design/Icon';
-import { ObjectThumb } from '../design/Screen';
 import { color, font, type } from '../design/tokens';
+import { CategoryChips, deepNote, RecentRows, ResultRow, useUniversalSearch } from '../features/search/SearchResults';
+import { rememberRecent } from '../state/store';
 
 const SUGGESTIONS = ['Andromeda Galaxy', 'Orion Nebula', 'Jupiter', 'Betelgeuse', 'Pleiades', 'Saturn'];
 
 export default function Search() {
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
-  const results = useMemo(() => search(query, 30), [query]);
-  const open = (id: string) => router.push({ pathname: '/object/[id]', params: { id } });
+  const [category, setCategory] = useState<Category | 'All'>('All');
+  const { results, deep } = useUniversalSearch(query, category);
+  const open = (id: string) => { rememberRecent(id); router.push({ pathname: '/object/[id]', params: { id } }); };
+  const note = deepNote(deep);
 
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -28,7 +30,8 @@ export default function Search() {
       </View>
       {query.trim() === '' ? (
         <View style={styles.suggest}>
-          <Text style={[type.tracked, { marginBottom: 6 }]}>Try</Text>
+          <RecentRows onPick={open} />
+          <Text style={[type.tracked, { marginBottom: 6, marginTop: 14 }]}>Try</Text>
           {SUGGESTIONS.map((s) => <Row key={s} title={s} onPress={() => setQuery(s)} />)}
         </View>
       ) : (
@@ -37,14 +40,9 @@ export default function Search() {
           keyExtractor={(r) => r.id}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingHorizontal: 22, paddingBottom: insets.bottom + 16 }}
+          ListHeaderComponent={<><CategoryChips value={category} onChange={setCategory} />{note ? <Notice text={note} tone="warn" /> : null}</>}
           ListEmptyComponent={<Text style={[type.body, { paddingVertical: 24 }]}>Nothing matches “{query}”.</Text>}
-          renderItem={({ item, index }) => {
-            const o = object(item.id);
-            return (
-              <Row testID={`result-${item.name}`} leading={o ? <ObjectThumb object={o} size={46} /> : undefined} title={item.name}
-                subtitle={item.matchedAlias ? `${item.matchedAlias} · ${item.category}` : item.category} last={index === results.length - 1} onPress={() => open(item.id)} />
-            );
-          }}
+          renderItem={({ item, index }) => <ResultRow item={item} last={index === results.length - 1} onPress={() => open(item.id)} />}
         />
       )}
     </KeyboardAvoidingView>

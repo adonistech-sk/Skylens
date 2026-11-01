@@ -24,7 +24,8 @@ There are no network calls in the sky, catalog or Tonight code. No analytics SDK
 
 | Data | Provider and version | Licence evidence | Storage | Release gate |
 |---|---|---|---|---|
-| Deep star pack, 76,806 stars, V 8.0 to 14.1 | The **same** Hipparcos input and `stars.bin` as the bundled stars. No new source | As the Hipparcos row | Bundled, `assets/catalogs/hip-deep-v1.db`, loaded by tile | Inherits the open Hipparcos review |
+| Deep star pack, 76,806 stars, V 8.0 to 14.1, 2.88 MB | The **same** Hipparcos input and `stars.bin` as the bundled stars. No new source | As the Hipparcos row | Bundled, `assets/catalogs/hip-deep-v1.db`, loaded by tile | Inherits the open Hipparcos review |
+| HD, HR and spectral rows for bundled V 6.8 to 8 stars | The **same** Yale and Hipparcos-derived `stars-meta.tsv`, added in Stage 2 inside the pack | As those rows | Inside the pack, read on first search | Inherits those reviews |
 | Constellation boundaries on screen | The **same** d3-celestial file. Already bundled in the Swift app, newly carried into RN | As the d3-celestial row | Bundled | As that row |
 | Coordinate grids | Computed by Astronomy Engine | MIT | Code | Pass |
 

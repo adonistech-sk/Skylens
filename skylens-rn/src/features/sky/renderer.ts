@@ -303,13 +303,14 @@ function drawHorizonLine(canvas: SkCanvas, f: SkyFrame) {
   canvas.drawPath(path.build(), paints.grid);
 }
 
-function drawBoundaries(canvas: SkCanvas, f: SkyFrame) {
+function drawBoundaries(canvas: SkCanvas, f: SkyFrame, only: string | null = null) {
   const { camera, moment } = f;
   const forward = mul(transpose(moment.matrix), unproject(camera, camera.width / 2, camera.height / 2));
   const half = viewHalfAngle(camera);
   const path = Skia.PathBuilder.Make();
   const limit = Math.max(camera.width, camera.height) * 0.7;
   for (const poly of boundaryPolygons()) {
+    if (only && poly.id !== only) continue;
     if (angleBetween(forward, poly.center) > half + poly.radius) continue;
     let prev: { x: number; y: number } | null = null;
     for (let i = 0; i < poly.xyz.length; i += 3) {
@@ -318,7 +319,8 @@ function drawBoundaries(canvas: SkCanvas, f: SkyFrame) {
       prev = p;
     }
   }
-  paints.dashed.setColor(Float32Array.of(0.62, 0.72, 0.92, 0.34));
+  if (only) paints.dashed.setColor(Float32Array.of(0.98, 0.68, 0.44, 0.7));
+  else paints.dashed.setColor(Float32Array.of(0.62, 0.72, 0.92, 0.34));
   canvas.drawPath(path.build(), paints.dashed);
 }
 
@@ -346,7 +348,9 @@ function drawConstellations(canvas: SkCanvas, f: SkyFrame, cam: Mat3, artOn: boo
   const names: ConstellationName[] = [];
   const pathNormal = Skia.PathBuilder.Make();
   const pathFocus = Skia.PathBuilder.Make();
+  const chosen = f.selection?.startsWith('con:') ? f.selection.slice(4) : null;
   for (const c of constellationGeometry()) {
+    if (!f.layers.constellations && c.id !== chosen) continue;
     let sumX = 0, sumY = 0, n = 0;
     const segs: [number, number, number, number][] = [];
     for (const [a, b] of c.segments) {
@@ -362,7 +366,7 @@ function drawConstellations(canvas: SkCanvas, f: SkyFrame, cam: Mat3, artOn: boo
     const cx = sumX / n, cy = sumY / n;
     const inside = cx > 0 && cx < w && cy > 0 && cy < h;
     const dist = Math.hypot(cx - center.x, cy - center.y);
-    const focus = inside && dist < Math.min(w, h) * (f.overlayOnly ? 0.4 : 0.3);
+    const focus = c.id === chosen || (inside && dist < Math.min(w, h) * (f.overlayOnly ? 0.4 : 0.3));
     const path = focus ? pathFocus : pathNormal;
     for (const s of segs) { path.moveTo(s[0], s[1]); path.lineTo(s[2], s[3]); }
     const span = Math.max(...segs.map((s) => Math.max(s[0], s[2]))) - Math.min(...segs.map((s) => Math.min(s[0], s[2])));
@@ -434,7 +438,8 @@ function collectLabels(f: SkyFrame, r: SkyResources, names: ConstellationName[],
   const aboveGround = (x: number, y: number) => !f.layers.ground || unproject(camera, x, y)[2] > 0.03;
   const inView = (x: number, y: number) => x >= 0 && y >= 0 && x <= camera.width && y <= camera.height;
 
-  if (f.selection && f.selectionName && f.selectionDir) {
+  // A constellation already wears its own name.
+  if (f.selection && f.selectionName && f.selectionDir && !f.selection.startsWith('con:')) {
     const p = project(camera, f.selectionDir);
     if (p && inView(p.x, p.y)) out.push({ text: f.selectionName, style: 'selection', priority: PRIORITY.selection, id: f.selection, boxes: around(p.x, p.y, r.labelFont.getTextWidth(f.selectionName), 16, 28) });
   }
@@ -557,11 +562,12 @@ function drawDeepSky(canvas: SkCanvas, f: SkyFrame, r: SkyResources, brightness:
 export const SELECTION_SETTLE = 0.34;
 
 /** Points from the middle of the view toward a target that has left the screen. */
-function drawGuide(canvas: SkCanvas, f: SkyFrame, r: SkyResources, dir: Vec3) {
+function drawGuide(canvas: SkCanvas, f: SkyFrame, dir: Vec3) {
   const { camera } = f;
   const inCamera = mul(camera.orientation, dir);
   const angle = Math.atan2(inCamera[1], inCamera[0]);
-  const cx = camera.width / 2, top = f.topInset + 12, bottom = camera.height - f.bottomInset - 12;
+  // The selection card sits over the bottom of the sky, so the guide stays above it.
+  const cx = camera.width / 2, top = f.topInset + 12, bottom = camera.height - f.bottomInset - 190;
   const cy = (top + bottom) / 2;
   const dx = Math.cos(angle), dy = -Math.sin(angle);
   const reach = Math.min(dx ? (cx - 26) / Math.abs(dx) : Infinity, dy ? (bottom - top) / 2 / Math.abs(dy) - 6 : Infinity);
@@ -574,16 +580,15 @@ function drawGuide(canvas: SkCanvas, f: SkyFrame, r: SkyResources, dir: Vec3) {
   arrow.close();
   paints.fill.setColor(Float32Array.of(0.98, 0.68, 0.44, 0.95));
   canvas.drawPath(arrow.build(), paints.fill);
-  const away = `${Math.round(angleBetween(dir, unproject(camera, cx, camera.height / 2)))}°`;
-  const w = r.smallFont.getTextWidth(away);
-  drawText(canvas, away, Math.min(camera.width - w - 8, Math.max(8, x - dx * 24 - w / 2)), y - dy * 24 + 4, r.smallFont, 1, 0.86, 0.74, 1);
 }
 
 function drawSelection(canvas: SkCanvas, f: SkyFrame, r: SkyResources) {
   if (!f.selectionDir) return;
   const p = project(f.camera, f.selectionDir);
+  // A constellation isn't a point, so its figure and boundary light up instead of a ring.
+  if (f.selection?.startsWith('con:') && p && p.x >= 0 && p.x <= f.camera.width && p.y >= f.topInset && p.y <= f.camera.height - f.bottomInset) return;
   const onScreen = p && p.x >= 0 && p.x <= f.camera.width && p.y >= f.topInset && p.y <= f.camera.height - f.bottomInset;
-  if (!onScreen) { if (f.showCompass) drawGuide(canvas, f, r, f.selectionDir); return; }
+  if (!onScreen) { if (f.showCompass) drawGuide(canvas, f, f.selectionDir); return; }
   // A ring settles onto the target, then four copper ticks hold it. The star stays clear.
   const t = Math.min(1, f.selectionAge / SELECTION_SETTLE);
   const e = 1 - (1 - t) * (1 - t) * (1 - t);
@@ -723,7 +728,9 @@ export function renderFrame(f: SkyFrame, r: SkyResources): SkPicture {
       if (f.layers.boundaries) drawBoundaries(canvas, f);
       if (!f.layers.ground && f.showCompass) drawHorizonLine(canvas, f);
     }
-    if (f.layers.constellations) names = drawConstellations(canvas, f, cam, artStrength > 0);
+    const chosen = f.selection?.startsWith('con:') ? f.selection.slice(4) : null;
+    if (chosen && !f.overlayOnly) drawBoundaries(canvas, f, chosen);
+    if (f.layers.constellations || chosen) names = drawConstellations(canvas, f, cam, artStrength > 0);
     if (f.layers.stars) drawStars(canvas, f, r, brightness, cam);
     if (f.layers.deepSky) drawDeepSky(canvas, f, r, brightness, candidates);
     if (f.layers.planets) {

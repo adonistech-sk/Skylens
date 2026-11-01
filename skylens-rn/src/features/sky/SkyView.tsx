@@ -3,8 +3,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, LayoutChangeEvent, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSharedValue, withTiming } from 'react-native-reanimated';
-import { angleBetween, Mat3, vectorHorizontal, Vec3 } from '../../astronomy/core';
-import { anchorView, Camera, dragView, flight, flightDuration, FOV_RANGE, orientationFor, pointsPerDegree, project, Projection, unproject, ViewState } from '../../astronomy/camera';
+import { angleBetween, Horizontal, Mat3, vectorHorizontal, Vec3 } from '../../astronomy/core';
+import { anchorView, Camera, dragView, flight, flightDuration, focusView, FOV_RANGE, framingFov, lowestView, orientationFor, pointsPerDegree, project, Projection, unproject, ViewState } from '../../astronomy/camera';
 import { directionOf } from '../../astronomy/locator';
 import { directionAt, object, stars } from '../../data/catalog';
 import { placeTile, StarTile } from '../../data/catalogs/deepPack';
@@ -15,13 +15,30 @@ import { BUNDLED_LIMIT, Layers, MODE_DEFAULTS, SkyMode, starLimit } from '../../
 import { getState, select, skyTime, useObserver, useStore } from '../../state/store';
 import { now, recordFrame } from './perf';
 import { emptyResult, frameBrightness, makeEffect, renderFrame, SELECTION_SETTLE, SkyResources } from './renderer';
-import { buildStarField, computeMoment, HitContext, hitTest, newCellBuffer, querySky, SkyMoment, StarField, yearsSinceJ2000 } from './scene';
+import { buildStarField, computeMoment, constellationSpan, hitCandidates, HitContext, hitTest, newCellBuffer, querySky, SkyMoment, StarField, yearsSinceJ2000 } from './scene';
 
 export interface SkyHandle {
   /** The object nearest the centre of the view. */
   identifyCentre: () => string | null;
   view: () => ViewState;
+  /** Where the screen's centre points, which under the compass is not the stored view. */
+  centre: () => Horizontal | null;
+  /** The last drawn frame, for anything that must agree with what is on screen. */
+  frame: () => HitContext | null;
+  /** Centres the view on a screen point. */
+  centreOn: (x: number, y: number) => void;
 }
+
+export interface SkyPoint {
+  x: number;
+  y: number;
+  /** Objects near the finger, best first. */
+  hits: string[];
+  direction: Vec3;
+}
+
+/** The map's view survives leaving the screen, so coming back returns to the same sky. */
+let rememberedView: ViewState | null = null;
 
 interface Props {
   /** When set, the sky follows this rotation instead of touch. Horizon → camera. */
@@ -36,6 +53,9 @@ interface Props {
   initial?: Partial<ViewState>;
   interactive?: boolean;
   onTapObject?: (id: string | null) => void;
+  onLongPress?: (point: SkyPoint) => void;
+  /** Keep this view across visits. Only the main map does. */
+  rememberView?: boolean;
   handleRef?: { current: SkyHandle | null };
   /** Draw no horizon, as on a detail page or over a camera. */
   hideGround?: boolean;
@@ -44,12 +64,15 @@ interface Props {
   onViewChange?: (v: ViewState) => void;
 }
 
+/** Milliseconds a finger rests before a press becomes a long press. */
+const LONG_PRESS = 450;
+
 /** The loaded textures, reused to composite AR photos off-screen. */
 export const sharedResources: { current: SkyResources | null } = { current: null };
 
 export function SkyView({
   orientationRef, projection = 'stereographic', fixedFov, overlayOnly = false, showCompass = true, bottomInset = 0, topInset = 0,
-  initial, interactive = true, onTapObject, handleRef, onViewChange, hideGround = false, focusId,
+  initial, interactive = true, onTapObject, onLongPress, rememberView = false, handleRef, onViewChange, hideGround = false, focusId,
 }: Props) {
   const skyMap = useImage(require('../../../assets/sky/milkyway.jpg'));
   const horizon = useImage(require('../../../assets/sky/horizon.png'));
@@ -74,9 +97,9 @@ export function SkyView({
   const previousOpacity = useSharedValue(0);
   const size = useRef({ width: 0, height: 0 });
   const [layoutTick, setLayoutTick] = useState(0);
-  const view = useRef<ViewState>({ azimuth: 180, altitude: 36, fov: 46, ...initial });
+  const view = useRef<ViewState>((rememberView && rememberedView) || { azimuth: 180, altitude: 36, fov: 46, ...initial });
   const moving = useRef(false);
-  const flightState = useRef<{ from: ViewState; to: ViewState; duration: number; start: number } | null>(null);
+  const flightState = useRef<{ from: ViewState; to: ViewState; duration: number; start: number; target?: string } | null>(null);
   const reduceMotion = useRef(false);
   const fieldRef = useRef<StarField | null>(null);
   const momentRef = useRef<SkyMoment | null>(null);
@@ -159,6 +182,13 @@ export function SkyView({
     const started = now();
     const f = flightState.current;
     if (f) {
+      // A moving clock moves the target too, so the flight lands where it is now.
+      const clock = getState().clock;
+      if (f.target && (clock.anchorSky === null || clock.rate !== 0)) {
+        const obj = object(f.target);
+        const dir = obj ? directionOf(obj, new Date(skyTime()), observer) : null;
+        if (dir) f.to = focusView(vectorHorizontal(dir), f.from, frameLayers().ground, f.to.fov);
+      }
       const elapsed = (Date.now() - f.start) / 1000;
       view.current = flight(f.from, f.to, f.duration, elapsed);
       if (elapsed >= f.duration) flightState.current = null;
@@ -168,7 +198,7 @@ export function SkyView({
     if (g) {
       const now = Date.now(), dt = Math.min(0.05, (now - g.last) / 1000);
       g.last = now;
-      view.current = dragView(view.current, g.vx * dt, g.vy * dt, pointsPerDegree(camera()));
+      view.current = dragView(view.current, g.vx * dt, g.vy * dt, pointsPerDegree(camera()), lowestView(frameLayers().ground));
       const decay = Math.exp(-dt * 5.2);
       g.vx *= decay; g.vy *= decay;
       if (Math.hypot(g.vx, g.vy) < 14) glide.current = null;
@@ -194,8 +224,10 @@ export function SkyView({
     const query = useIndex ? querySky(cam, moment, field.years, pack?.status === 'ready' ? (c) => pack.fastest(c) : null, cells.current) : null;
     if (query && pack) query.tiles = gatherTiles(query.cells, query.count, field);
     const result = emptyResult();
+    const focused = focusId ? object(focusId) : null;
+    const markFaint = focused?.type === 'star' && (focused.magnitude ?? 0) > limit;
     picture.value = renderFrame({
-      camera: cam, moment, field, layers, selection: focusId ? null : sel, selectionDir: focusId ? null : selectionDir.current,
+      camera: cam, moment, field, layers, selection: focusId ? (markFaint ? focusId : null) : sel, selectionDir: focusId ? (markFaint ? directionOf(focused, new Date(moment.time), observer) : null) : selectionDir.current,
       chart: { mode, settings, limit, query, readout: mode === 'atlas' && showCompass }, result, selectionName: focusId ? null : obj?.name ?? null,
       moving: isMoving, overlayOnly, bottomInset, topInset, showCompass, nightVision: state.nightVision,
       selectionAge: reduceMotion.current ? SELECTION_SETTLE : selectionAge, nightPreview: state.nightPreview,
@@ -206,6 +238,7 @@ export function SkyView({
       const base = stars().count;
       recordFrame(now() - started, { indexed: base + (state.flags.deepPack ? DEEP_PACK.stars : 0), loaded: base + (pack?.loadedStars ?? 0), scanned: result.scanned, drawn: result.drawn, limit });
     }
+    if (rememberView) rememberedView = view.current;
     onViewChange?.(view.current);
     const settling = !!sel && !reduceMotion.current && selectionAge < SELECTION_SETTLE;
     if (flightState.current || orientationRef || glide.current || settling) schedule();
@@ -246,15 +279,17 @@ export function SkyView({
   // Fly to whatever was requested, from search, detail or Tonight.
   useEffect(() => {
     if (!focus || !resources) return;
+    fieldRef.current ??= buildStarField(stars(), yearsSinceJ2000(skyTime()));
     const obj = object(focus.id);
     if (!obj) return;
     const dir = directionOf(obj, new Date(skyTime()), observer);
     if (!dir) return;
     const h = vectorHorizontal(dir);
     const from = view.current;
-    const to: ViewState = { azimuth: h.azimuth, altitude: Math.min(82, Math.max(-5, h.altitude)), fov: Math.min(from.fov, 60) };
+    const span = obj.type === 'constellation' && fieldRef.current ? constellationSpan(focus.id.slice(4), fieldRef.current) : null;
+    const to = focusView(h, from, frameLayers().ground, focus.fov ?? (span !== null ? framingFov(span) : undefined));
     const angle = angleBetween(dir, orientationCentre(from));
-    flightState.current = { from, to, duration: flightDuration(angle, reduceMotion.current || DEMO_MODE), start: Date.now() };
+    flightState.current = { from, to, duration: flightDuration(angle, reduceMotion.current || DEMO_MODE), start: Date.now(), target: focus.id };
     schedule();
   }, [focus?.nonce, resources]);
 
@@ -281,6 +316,14 @@ export function SkyView({
     handleRef.current = {
       identifyCentre: () => identify(size.current.width / 2, (size.current.height - bottomInset + topInset) / 2, 90)?.id ?? null,
       view: () => view.current,
+      centre: () => (size.current.width ? vectorHorizontal(unproject(camera(), size.current.width / 2, size.current.height / 2)) : null),
+      frame: () => lastFrame.current,
+      centreOn: (x, y) => {
+        const h = vectorHorizontal(unproject(camera(), x, y));
+        const from = view.current;
+        flightState.current = { from, to: focusView(h, from, frameLayers().ground), duration: reduceMotion.current || DEMO_MODE ? 0 : 0.45, start: Date.now() };
+        schedule();
+      },
     };
   }
 
@@ -289,7 +332,7 @@ export function SkyView({
     .onStart(() => { flightState.current = null; glide.current = null; moving.current = true; start.current = view.current; })
     .onUpdate((e) => {
       const ppd = pointsPerDegree(camera());
-      view.current = dragView(start.current, e.translationX, e.translationY, ppd);
+      view.current = dragView(start.current, e.translationX, e.translationY, ppd, lowestView(frameLayers().ground));
       schedule();
     })
     .onEnd((e) => {
@@ -305,27 +348,34 @@ export function SkyView({
     .onUpdate((e) => {
       const fov = Math.min(FOV_RANGE[1], Math.max(FOV_RANGE[0], start.current.fov / e.scale));
       const zoomed = { ...view.current, fov };
-      view.current = pinchAnchor.current ? anchorView(zoomed, pinchAnchor.current, e.focalX, e.focalY, size.current.width, size.current.height, projection) : zoomed;
+      view.current = pinchAnchor.current ? anchorView(zoomed, pinchAnchor.current, e.focalX, e.focalY, size.current.width, size.current.height, projection, lowestView(frameLayers().ground)) : zoomed;
       schedule();
     })
     .onFinalize(() => { moving.current = false; pinchAnchor.current = null; schedule(); });
-  const tap = Gesture.Tap().runOnJS(true).maxDistance(10).onEnd((e, success) => {
+  const tap = Gesture.Tap().runOnJS(true).maxDistance(10).maxDuration(LONG_PRESS - 10).onEnd((e, success) => {
     if (!success) return;
     const hit = identify(e.x, e.y);
     select(hit?.id ?? null);
     onTapObject?.(hit?.id ?? null);
   });
+  const longPress = Gesture.LongPress().runOnJS(true).minDuration(LONG_PRESS).maxDistance(10).onStart((e) => {
+    const last = lastFrame.current;
+    if (!last || !onLongPress) return;
+    glide.current = null;
+    const hits = hitCandidates(e.x, e.y, { ...last, camera: camera() }, 34, 4).map((h) => h.id);
+    onLongPress({ x: e.x, y: e.y, hits, direction: unproject(camera(), e.x, e.y) });
+  });
   const doubleTap = Gesture.Tap().runOnJS(true).numberOfTaps(2).onEnd((e, success) => {
     if (!success) return;
     const from = view.current;
     const zoomed = { ...from, fov: Math.max(FOV_RANGE[0], from.fov * 0.5) };
-    const to = orientationRef?.current ? zoomed : anchorView(zoomed, unproject(camera(), e.x, e.y), e.x, e.y, size.current.width, size.current.height, projection);
+    const to = orientationRef?.current ? zoomed : anchorView(zoomed, unproject(camera(), e.x, e.y), e.x, e.y, size.current.width, size.current.height, projection, lowestView(frameLayers().ground));
     flightState.current = { from, to, duration: reduceMotion.current ? 0 : 0.35, start: Date.now() };
     schedule();
   });
   // Taps run alongside the pan: a tap fails by itself once the finger moves 10pt, whereas
   // an Exclusive with the pan first would leave the tap waiting on it.
-  const gestures = Gesture.Simultaneous(pan, pinch, Gesture.Exclusive(doubleTap, tap));
+  const gestures = Gesture.Simultaneous(pan, pinch, longPress, Gesture.Exclusive(doubleTap, tap));
 
   const onLayout = (e: LayoutChangeEvent) => {
     size.current = { width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height };

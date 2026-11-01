@@ -21,7 +21,7 @@ Scan counts cover the bundled stars. Deep pack stars are added only for tiles in
 
 | Measure | Result |
 |---|---|
-| File size | 2,169,036 bytes, adding about 2.2 MB to the app |
+| File size | 2,878,598 bytes, adding about 2.9 MB to the app. Stage 2 added 0.7 MB for star numbers and designations |
 | Stars | 76,806, V 8.01 to 14.08 |
 | Read on a real pinch to 4° | 130 tiles, 6,281 stars, 8% of the pack |
 | Cache ceiling | 50,000 stars. Test holds a 5,000 ceiling, peak within one batch |
@@ -36,6 +36,20 @@ The Layers panel now shows JS frame time (p50, p95, worst), stars drawn, scanned
 | Headless Chrome with software GPU | 7.4 ms | 37.2 ms | Web Skia under SwiftShader. Not comparable to iOS |
 | iPhone Simulator, Release, in CI | Awaiting a run | | `flow_diagnostics_atlas` screenshot |
 | Physical iPhone | `DEVICE_NOT_TESTED` | | Open Layers and read the panel after a minute of use |
+
+## Stage 2 calculations, Node on this PC
+
+From `BENCH=1 npx vitest run tests/perf.test.ts`. Hermes has no JIT, so expect each of these to be many times slower on a phone. The ratio isn't known until a device run.
+
+| Calculation | Time | When it runs |
+|---|---|---|
+| Search index, first build | 98 ms | Once, after the panel or search first paints |
+| Pack numbers into search | 14 ms | Once. It was 69 ms before moving to native sorting |
+| A search | 1.6 ms | Each keystroke |
+| Altitude chart, the Moon | 50 ms | After the Observing tab paints |
+| Altitude chart, a star | 4 ms | After the Observing tab paints |
+| Related objects, first | 15 ms | Once, then under 1 ms |
+| Discovery pass | 0.4 ms | Every 1.2 s with the panel open. It was far heavier before reusing the frame's Sun altitude |
 
 ## PRD budgets
 

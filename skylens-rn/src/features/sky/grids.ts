@@ -139,6 +139,23 @@ export function boundaryPolygons(): BoundaryPolygon[] {
   return polygons;
 }
 
+/** Square degrees on the sphere, from the line integral around the boundary. */
+export function polygonArea(p: BoundaryPolygon): number {
+  let sum = 0, wind = 0;
+  const n = p.xyz.length / 3 - 1;
+  for (let i = 0; i < n; i++) {
+    const lon0 = Math.atan2(p.xyz[i * 3 + 1], p.xyz[i * 3]), lon1 = Math.atan2(p.xyz[i * 3 + 4], p.xyz[i * 3 + 3]);
+    let d = lon1 - lon0;
+    if (d > Math.PI) d -= 2 * Math.PI; else if (d < -Math.PI) d += 2 * Math.PI;
+    wind += d;
+    sum += (d * (p.xyz[i * 3 + 2] + p.xyz[i * 3 + 5])) / 2;
+  }
+  // A boundary around a celestial pole encloses the cap on that pole's side.
+  const encloses = Math.abs(wind) > Math.PI;
+  const steradians = encloses ? 2 * Math.PI - Math.sign(p.center[2]) * Math.sign(wind) * sum : Math.abs(sum);
+  return steradians * RAD * RAD;
+}
+
 /** Whether a direction lies inside a boundary: the edges wind once around anything enclosed. */
 export function polygonContains(p: BoundaryPolygon, v: Vec3): boolean {
   // Bearings can't tell a point from its antipode, so the far side of the sky is ruled out first.

@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { anchorView, Camera, orientationFor, project, unproject } from '../src/astronomy/camera';
+import { anchorView, Camera, dragView, focusView, framingFov, lowestView, orientationFor, project, unproject } from '../src/astronomy/camera';
 import { angleBetween, Astronomy, equatorialVector, horizontalVector, j2000ToHorizon, mul, Observer, vectorEquatorial, vectorHorizontal } from '../src/astronomy/core';
 import { constellations, object, starDirection, stars } from '../src/data/catalog';
 import { boundaryPolygons, gridLabel, gridLines, gridStep, gridToJ2000, lonLat, polygonContains } from '../src/features/sky/grids';
 import { labelAt, LabelCandidate, placeLabels, PRIORITY } from '../src/features/sky/labels';
-import { buildStarField, computeMoment, deepGroup, HitContext, hitTest, newCellBuffer, querySky, visibleDeepSky, yearsSinceJ2000 } from '../src/features/sky/scene';
-import { DEFAULT_LAYERS, labelBudget, labelLimit, migrateSkySettings, MODE_DEFAULTS, NO_CAP, SkyMode, starLimit } from '../src/state/skyModes';
+import { clampTop, panelStops, restingDetent } from '../src/features/sky/detents';
+import { buildStarField, computeMoment, deepGroup, hitCandidates, HitContext, hitTest, newCellBuffer, querySky, visibleDeepSky, yearsSinceJ2000 } from '../src/features/sky/scene';
+import { DEFAULT_LAYERS, fovForMagnitude, labelBudget, labelLimit, migrateSkySettings, MODE_DEFAULTS, NO_CAP, SkyMode, starLimit } from '../src/state/skyModes';
 
 const site: Observer = { latitude: 48.1486, longitude: 17.1077, elevation: 134 };
 const when = new Date('2027-01-17T20:25:00Z');
@@ -192,6 +193,53 @@ describe('zoom about the fingers', () => {
   });
 });
 
+describe('the panel rests where a finger leaves it', () => {
+  const stops = panelStops(852, 59, 648);
+  it('the nearest stop wins a slow release', () => {
+    expect(restingDetent(630, 0, stops)).toBe('collapsed');
+    expect(restingDetent(420, 100, stops)).toBe('half');
+    expect(restingDetent(120, -100, stops)).toBe('full');
+  });
+  it('a flick moves one stop that way, and stops at the ends', () => {
+    expect(restingDetent(640, -900, stops)).toBe('half');
+    expect(restingDetent(380, -900, stops)).toBe('full');
+    expect(restingDetent(100, 900, stops)).toBe('half');
+    expect(restingDetent(400, 900, stops)).toBe('collapsed');
+    expect(restingDetent(stops.full, -900, stops)).toBe('full');
+    expect(restingDetent(stops.collapsed, 900, stops)).toBe('collapsed');
+  });
+  it('dragging can never pass either end', () => {
+    expect(clampTop(-50, stops)).toBe(stops.full);
+    expect(clampTop(900, stops)).toBe(stops.collapsed);
+    expect(stops.full).toBeLessThan(stops.half);
+    expect(stops.half).toBeLessThan(stops.collapsed);
+  });
+});
+
+describe('flights', () => {
+  it('reach a target near the zenith instead of stopping short', () => {
+    expect(focusView({ azimuth: 40, altitude: 88 }, { azimuth: 0, altitude: 30, fov: 46 }, true).altitude).toBe(88);
+  });
+  it('stop at the ground, but follow a target below it when no ground is drawn', () => {
+    expect(focusView({ azimuth: 40, altitude: -36 }, { azimuth: 0, altitude: 30, fov: 46 }, true).altitude).toBe(-5);
+    expect(focusView({ azimuth: 40, altitude: -36 }, { azimuth: 0, altitude: 30, fov: 46 }, false).altitude).toBe(-36);
+    expect(dragView({ azimuth: 0, altitude: 0, fov: 40 }, 0, -1e5, 10, lowestView(true)).altitude).toBe(-20);
+    expect(dragView({ azimuth: 0, altitude: 0, fov: 40 }, 0, -1e5, 10, lowestView(false)).altitude).toBe(-89);
+  });
+  it('keep the view no wider than 60 degrees, and frame a constellation', () => {
+    expect(focusView({ azimuth: 0, altitude: 10 }, { azimuth: 0, altitude: 0, fov: 120 }, true).fov).toBe(60);
+    expect(framingFov(5)).toBe(24);
+    expect(framingFov(25)).toBeCloseTo(67.5, 5);
+    expect(framingFov(90)).toBe(100);
+  });
+  it('choose a Deep Atlas view that really draws the star', () => {
+    for (const mag of [8.5, 9.54, 11, 13]) {
+      const fov = fovForMagnitude(mag);
+      expect(starLimit('atlas', MODE_DEFAULTS.atlas, fov, 0, false), `V ${mag}`).toBeGreaterThanOrEqual(mag);
+    }
+  });
+});
+
 describe('selection only reaches what the frame drew', () => {
   const t = stars();
   const moment = computeMoment(when.getTime(), site);
@@ -253,6 +301,19 @@ describe('selection only reaches what the frame drew', () => {
     const p = project(below.camera, horizontalVector({ azimuth: 180, altitude: -8 }))!;
     expect(hitTest(p.x, p.y, below)).toBeNull();
     expect(hitTest(196, 760, context({}, 180, 40, 90))).toBeNull();
+  });
+  it('a long press lists neighbours best first, each object once', () => {
+    const { c, p } = aimed(star(26311), 12);
+    const near = hitCandidates(p.x, p.y, c, 60, 4);
+    expect(near.length).toBeGreaterThan(1);
+    expect(near[0].id).toBe('star:26311');
+    expect(new Set(near.map((h) => h.id)).size).toBe(near.length);
+    expect(hitTest(p.x, p.y, c, 60)?.id).toBe(near[0].id);
+  });
+  it('a long press on the ground finds nothing', () => {
+    const below = context({}, 180, 0, 90);
+    const p = project(below.camera, horizontalVector({ azimuth: 180, altitude: -8 }))!;
+    expect(hitCandidates(p.x, p.y, below)).toEqual([]);
   });
   it('tapping a constellation name selects the constellation', () => {
     const { c } = aimed(star(24436), 20);

@@ -235,6 +235,12 @@ describe('the deep star pack', () => {
     expect(o.position!.decDeg).toBeCloseTo(row.dec, 5);
   });
 
+  it('its star numbers are sorted, and its extra designations are plain ASCII', async () => {
+    const index = (await newPack().index())!;
+    for (let i = 1; i < index.hips.length; i++) expect(index.hips[i]).toBeGreaterThan(index.hips[i - 1]);
+    expect(JSON.stringify(index.extra)).toMatch(/^[\x00-\x7f]*$/);
+  });
+
   it('finds saved stars anywhere in the pack', async () => {
     const pack = newPack();
     const wanted = [...readPackRows().keys()].filter((_, i) => i % 20000 === 3);

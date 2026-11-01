@@ -1,0 +1,51 @@
+# The contextual panel on iOS: opening, universal search into the deep pack, and back to
+# the sky. Written for the next iOS run. It has not run yet.
+appId: sk.skylens.app
+---
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: sky-search
+    timeout: 90000
+- runFlow:
+    file: lib/settle.yaml
+    env:
+      WAIT: 5000
+- tapOn:
+    id: sheet-handle
+- extendedWaitUntil:
+    visible:
+      id: sheet-discovery
+    timeout: 8000
+- takeScreenshot: flow_panel_half
+- tapOn:
+    id: sheet-search
+- inputText: "HIP 87937"
+- extendedWaitUntil:
+    visible: ".*Barnard.*"
+    timeout: 15000
+- takeScreenshot: flow_panel_search_pack
+- tapOn: ".*Barnard.*"
+- extendedWaitUntil:
+    visible:
+      id: sky-show-atlas
+    timeout: 12000
+- tapOn:
+    id: sky-show-atlas
+- runFlow:
+    file: lib/settle.yaml
+    env:
+      WAIT: 4000
+- takeScreenshot: flow_pack_star_in_atlas
+- tapOn:
+    id: sky-deselect
+- tapOn:
+    id: segment-explore
+# A real long press, which is the one gesture Maestro can drive here.
+- longPressOn:
+    point: "71%,58%"
+- extendedWaitUntil:
+    visible:
+      id: sky-menu
+    timeout: 6000
+- takeScreenshot: flow_long_press_menu

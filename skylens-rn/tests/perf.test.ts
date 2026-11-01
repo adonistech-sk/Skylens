@@ -6,11 +6,37 @@ import { equatorialVector, j2000ToHorizon, mul, Observer, vectorHorizontal } fro
 import { directionAt, stars } from '../src/data/catalog';
 import { DeepPack } from '../src/data/catalogs/deepPack';
 import { CELL_COUNT } from '../src/data/catalogs/grid';
-import { buildStarField, eachStar, mulMatFast, newCellBuffer, querySky, SkyMoment } from '../src/features/sky/scene';
+import { buildStarField, computeMoment, eachStar, mulMatFast, newCellBuffer, querySky, SkyMoment } from '../src/features/sky/scene';
 import { MODE_DEFAULTS, SkyMode, starLimit } from '../src/state/skyModes';
+import { visibilityTimeline } from '../src/astronomy/observing';
+import { object } from '../src/data/catalog';
+import { relatedObjects } from '../src/data/related';
+import { installDeepSearch, numberMatches, prepareSearch } from '../src/data/search';
+import { discover } from '../src/features/sky/discovery';
 import { fileStorage, settled } from './helpers';
 
 const site: Observer = { latitude: 48.1486, longitude: 17.1077, elevation: 134 };
+
+describe.runIf(process.env.BENCH === '1')('Stage 2 work on the JS thread', () => {
+  it('times each new calculation once, as a person would trigger it', async () => {
+    const time = (name: string, fn: () => void) => { const a = performance.now(); fn(); console.log(name.padEnd(34), (performance.now() - a).toFixed(2), 'ms'); };
+    const night = new Date('2027-01-17T20:25:00Z');
+    time('search index, first build', () => prepareSearch());
+    const pack = new DeepPack(async () => fileStorage(), { direction: directionAt });
+    const a = performance.now();
+    const index = (await pack.index())!;
+    console.log('pack number index, read', (performance.now() - a).toFixed(2), 'ms');
+    time('pack numbers into search', () => { installDeepSearch(index.hips, index.extra); numberMatches('hip', '1', 1); });
+    const o = object('body:moon')!;
+    time('visibility timeline, the Moon', () => visibilityTimeline(o, night, site, 'Europe/Bratislava'));
+    time('visibility timeline, a star', () => visibilityTimeline(object('star:27989')!, night, site, 'Europe/Bratislava'));
+    time('related objects, first', () => relatedObjects(object('star:27989')!, null));
+    time('related objects, again', () => relatedObjects(object('dso:M42')!, null));
+    const moment = computeMoment(night.getTime(), site);
+    const camera: Camera = { orientation: orientationFor(165, 36), fov: 46, width: 393, height: 852, projection: 'stereographic' };
+    time('discovery, 20 passes', () => { for (let i = 0; i < 20; i++) discover({ camera, moment, layers: MODE_DEFAULTS.explore.layers, mode: 'explore', brightness: 0, topEdge: 100, bottomEdge: 700 }, 12, true); });
+  });
+});
 
 describe.runIf(process.env.BENCH === '1')('star loop', () => {
   it('times the original scan against the index', async () => {

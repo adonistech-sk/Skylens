@@ -60,3 +60,18 @@ Bugs this work found:
 - **Faint zoomed stars could not be tapped,** and deep-sky objects could be tapped when not drawn. Taps now reach only what the frame drew.
 - **Pinch ignored the fingers.** It now zooms about them.
 - **A test helper counted a boundary's antipode as inside it,** which read as 51% agreement. The data was sound.
+
+## V1 Stage 2
+
+| Check | Command | Result |
+|---|---|---|
+| Panel and interaction captures | `node scripts/web-stage2.mjs <out>` | Web only, 20 states |
+| One browser flow | `ONLY="part of the name" node scripts/web-flows.mjs <out>` | Skips the rest |
+
+Bugs this work found:
+
+- **A marker ignored proper motion,** so it drifted off fast stars under Time Travel.
+- **One gesture in two detectors crashed the app,** with "No handler for tag".
+- **Two selection cards were mounted at once.** Only a browser test counting elements showed it.
+- **Observe suggested Neptune.** Magnitude 7.9 isn't naked-eye.
+- **Step arrows didn't reverse,** because each step reordered the list.

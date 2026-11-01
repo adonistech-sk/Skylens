@@ -79,6 +79,9 @@ export function starLimit(mode: SkyMode, settings: Pick<SkySettings, 'density' |
   return Math.min(settings.magnitudeCap, limit + offset - faded - motion);
 }
 
+/** The widest Deep Atlas view that draws a star of this magnitude. */
+export const fovForMagnitude = (magnitude: number) => Math.min(46, Math.max(2, 60 / Math.pow(10, (magnitude + 0.3 - 6.7) / 5.4)));
+
 /** Named stars brighter than this get a label. */
 export function labelLimit(mode: SkyMode, labelDensity: number, fov: number): number {
   const steps = mode === 'atlas'

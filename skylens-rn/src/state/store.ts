@@ -6,6 +6,8 @@ import { useSyncExternalStore } from 'react';
 import { Observer } from '../astronomy/core';
 import { DEMO_DATE, DEMO_LOCATION, DEMO_MODE } from './demo';
 import { DEFAULT_FLAGS, Flags } from './flags';
+import * as Lists from './lists';
+import { moved, ObjectList, remembered, sanitizeLists } from './lists';
 import { DEFAULT_LAYERS, Layers, migrateSkySettings, MODE_DEFAULTS, ModeSettings, SkyMode, SkySettings } from './skyModes';
 
 export { DEFAULT_LAYERS };
@@ -29,6 +31,9 @@ export interface Persisted {
   skyMode: SkyMode;
   modes: ModeSettings;
   flags: Flags;
+  lists: ObjectList[];
+  /** Objects opened from search, most recent first. */
+  recents: string[];
 }
 
 interface Clock {
@@ -39,7 +44,7 @@ interface Clock {
   rate: number;
 }
 
-export interface FocusRequest { id: string; nonce: number }
+export interface FocusRequest { id: string; nonce: number; fov?: number }
 
 interface State extends Persisted {
   hydrated: boolean;
@@ -66,6 +71,8 @@ const initial: State = {
   skyMode: 'explore',
   modes: MODE_DEFAULTS,
   flags: DEFAULT_FLAGS,
+  lists: [],
+  recents: [],
   clock: { anchorSky: null, anchorReal: 0, rate: 1 },
   selection: null,
   focus: null,
@@ -78,9 +85,9 @@ const listeners = new Set<() => void>();
 
 function persist() {
   if (DEMO_MODE) return; // Screenshot runs never touch saved user data.
-  const { onboarded, location, favorites, use24h, nightVision, skyMode, modes, flags } = state;
+  const { onboarded, location, favorites, use24h, nightVision, skyMode, modes, flags, lists, recents } = state;
   // proActive is deliberately not restored from here: entitlements are re-read from StoreKit.
-  AsyncStorage.setItem(KEY, JSON.stringify({ onboarded, location, favorites, use24h, nightVision, skyMode, modes, flags })).catch(() => {});
+  AsyncStorage.setItem(KEY, JSON.stringify({ onboarded, location, favorites, use24h, nightVision, skyMode, modes, flags, lists, recents })).catch(() => {});
 }
 
 function set(patch: Partial<State>, save = false) {
@@ -109,7 +116,8 @@ export async function hydrate() {
     // Missing keys fall back to defaults, so new options never reset settings.
     const saved = raw ? (JSON.parse(raw) as Partial<Persisted>) : {};
     const { modes, skyMode } = migrateSkySettings(saved);
-    set({ ...saved, skyMode, modes, layers: modes[skyMode].layers, flags: { ...DEFAULT_FLAGS, ...saved.flags }, hydrated: true });
+    const recents = Array.isArray(saved.recents) ? saved.recents.filter((r) => typeof r === 'string') : [];
+    set({ ...saved, skyMode, modes, layers: modes[skyMode].layers, flags: { ...DEFAULT_FLAGS, ...saved.flags }, lists: sanitizeLists(saved.lists), recents, hydrated: true });
   } catch {
     // A corrupt file must not stop the app. Starting fresh is the safe recovery.
     set({ hydrated: true });
@@ -146,9 +154,29 @@ export function toggleFavorite(id: string) {
   set({ favorites: has ? state.favorites.filter((f) => f !== id) : [id, ...state.favorites] }, true);
 }
 
+export const moveFavorite = (id: string, offset: number) => set({ favorites: moved(state.favorites, id, offset) }, true);
+
+// ---- Observing lists ----
+
+/** Creates a list and returns its ID, or null for an empty name. */
+export function createList(name: string, firstItem?: string): string | null {
+  const next = Lists.createList(state.lists, name, Date.now());
+  if (next === state.lists) return null;
+  const id = next[next.length - 1].id;
+  set({ lists: firstItem ? Lists.addToList(next, id, firstItem) : next }, true);
+  return id;
+}
+export const renameList = (id: string, name: string) => set({ lists: Lists.renameList(state.lists, id, name) }, true);
+export const deleteList = (id: string) => set({ lists: Lists.deleteList(state.lists, id) }, true);
+export const addToList = (id: string, item: string) => set({ lists: Lists.addToList(state.lists, id, item) }, true);
+export const removeFromList = (id: string, item: string) => set({ lists: Lists.removeFromList(state.lists, id, item) }, true);
+export const moveInList = (id: string, item: string, offset: number) => set({ lists: Lists.moveInList(state.lists, id, item, offset) }, true);
+export const rememberRecent = (id: string) => set({ recents: remembered(state.recents, id) }, true);
+export const clearRecents = () => set({ recents: [] }, true);
+
 let nonce = 0;
 /** Asks the sky to fly to an object, wherever the request came from. */
-export const requestFocus = (id: string) => set({ selection: id, focus: { id, nonce: ++nonce } });
+export const requestFocus = (id: string, fov?: number) => set({ selection: id, focus: { id, nonce: ++nonce, fov } });
 
 // ---- The one clock ----
 

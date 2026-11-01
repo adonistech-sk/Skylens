@@ -13,7 +13,7 @@ export function readPackRows(): Map<number, StarRow> {
   const b = fs.readFileSync(PACK_FILE);
   rows = new Map();
   const at = packRecordsOffset();
-  const n = (b.length - at) / PACK_RECORD;
+  const n = b.readUInt32LE(8);
   for (let i = 0; i < n; i++) {
     const o = at + i * PACK_RECORD;
     const hip = b.readUInt32LE(o), c = b.readInt16LE(o + 26);

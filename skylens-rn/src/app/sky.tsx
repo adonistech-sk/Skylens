@@ -2,22 +2,30 @@ import { router } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ViewState } from '../astronomy/camera';
+import { project, ViewState } from '../astronomy/camera';
+import * as Haptics from 'expo-haptics';
 import { altitude, vectorHorizontal } from '../astronomy/core';
 import { directionOf, locate } from '../astronomy/locator';
-import { object, TYPE_NAMES } from '../data/catalog';
-import { deepPack, onDeepPackChange } from '../data/catalogs/runtime';
-import { IconButton, press, SegmentedControl, TabBar } from '../design/components';
+import { guidance, horizontalOf } from '../astronomy/observing';
+import { object } from '../data/catalog';
+import { deepPack, ensureObject, onDeepPackChange } from '../data/catalogs/runtime';
+import { IconButton, SegmentedControl, TabBar } from '../design/components';
 import { Tap } from '../design/motion';
 import { Icon } from '../design/Icon';
-import { color, font, type } from '../design/tokens';
+import { color, font } from '../design/tokens';
+import { AddToList } from '../features/lists/AddToList';
 import { CompassSession } from '../features/sky/CompassSession';
+import { Detent } from '../features/sky/detents';
+import { discover } from '../features/sky/discovery';
 import { LayersPanel } from '../features/sky/LayersPanel';
 import { skyBrightness } from '../features/sky/scene';
-import { SkyHandle, SkyView } from '../features/sky/SkyView';
+import { SelectionCard } from '../features/sky/SelectionCard';
+import { SkyContextMenu } from '../features/sky/SkyContextMenu';
+import { SkySheet } from '../features/sky/SkySheet';
+import { SkyHandle, SkyPoint, SkyView } from '../features/sky/SkyView';
 import { DEMO_MODE } from '../state/demo';
 import { MODE_LABELS, SkyMode } from '../state/skyModes';
-import { getState, requestFocus, select, setNightPreview, setSkyMode, skyTime, toggleFavorite, useObserver, useStore } from '../state/store';
+import { getState, requestFocus, select, setNightPreview, setSkyMode, skyTime, useObserver, useStore } from '../state/store';
 
 const MODES: { value: SkyMode; label: string }[] = (['observe', 'explore', 'atlas'] as SkyMode[]).map((value) => ({ value, label: MODE_LABELS[value] }));
 
@@ -51,8 +59,14 @@ export default function SkyScreen() {
   const airless = useStore((s) => !s.layers.atmosphere);
   const skyMode = useStore((s) => s.skyMode);
   const modesOn = useStore((s) => s.flags.skyModes);
-  const favorite = useStore((s) => (s.selection ? s.favorites.includes(s.selection) : false));
-  const { height } = useWindowDimensions();
+  useStore((s) => s.catalogRevision);
+  const { width, height } = useWindowDimensions();
+  const [detent, setDetent] = useState<Detent>('collapsed');
+  const [menu, setMenu] = useState<SkyPoint | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [guide, setGuide] = useState<string | null>(null);
+  const [tooFaint, setTooFaint] = useState(false);
+  const [canStep, setCanStep] = useState(false);
   const live = useStore((s) => s.clock.anchorSky === null);
   const observer = useObserver();
 
@@ -75,6 +89,57 @@ export default function SkyScreen() {
     return () => clearInterval(id);
   }, [observer, live]);
 
+  /** What is on screen now, for stepping between objects and the card's hints. */
+  const inView = () => {
+    const f = handle.current?.frame();
+    if (!f) return [];
+    return discover({ camera: f.camera, moment: f.moment, layers: f.layers, mode: f.mode, brightness: f.brightness, topEdge: insets.top + 56, bottomEdge: f.bottomEdge }, 12, true).map((s) => s.object.id);
+  };
+
+  // Directions and hints follow the view, a few times a second at most.
+  useEffect(() => {
+    if (!selected) { setGuide(null); setTooFaint(false); setCanStep(false); return; }
+    let tick = 0;
+    const look = () => {
+      const f = handle.current?.frame();
+      const centre = handle.current?.centre();
+      const target = horizontalOf(selected, new Date(skyTime()), observer);
+      if (!f || !centre || !target) return;
+      const dir = directionOf(selected, new Date(skyTime()), observer);
+      const p = dir ? project(f.camera, dir) : null;
+      const onScreen = !!p && p.x >= 0 && p.x <= f.camera.width && p.y >= insets.top + 56 && p.y <= f.bottomEdge;
+      setGuide(onScreen ? null : guidance(centre, target).text);
+      setTooFaint(selected.type === 'star' && selected.magnitude !== null && selected.magnitude > f.limit);
+      // Heavier than the rest, and it rarely changes.
+      if (tick++ % 5 === 0) setCanStep(inView().filter((id) => id !== selected.id).length > 0);
+    };
+    look();
+    const id = setInterval(look, 400);
+    return () => clearInterval(id);
+  }, [selected?.id, observer]);
+
+  // Each step recentres the view, which would reorder a fresh list. So a run of steps keeps
+  // the list it started with, and back always returns to where it came from.
+  const stepping = useRef<string[]>([]);
+  const step = (offset: number) => {
+    if (!selection || !stepping.current.includes(selection)) stepping.current = [...new Set([...(selection ? [selection] : []), ...inView()])];
+    const list = stepping.current;
+    if (list.length < 2) return;
+    const at = selection ? list.indexOf(selection) : 0;
+    requestFocus(list[(at + offset + list.length) % list.length]);
+  };
+
+  const longPress = (p: SkyPoint) => {
+    Haptics.selectionAsync().catch(() => {});
+    setPanel('none');
+    if (detent !== 'collapsed') setDetent('collapsed');
+    setMenu(p);
+  };
+
+  const card = (inline: boolean) => (selected && location ? (
+    <SelectionCard object={selected} location={location} guide={guide} tooFaint={tooFaint} inline={inline} onStep={canStep ? step : undefined} onAddToList={() => setAdding(true)} />
+  ) : null);
+
   // Reported only in Deep Atlas, the one place the pack is used.
   const [packNote, setPackNote] = useState<string | null>(null);
   useEffect(() => {
@@ -88,8 +153,8 @@ export default function SkyScreen() {
 
   return (
     <View style={styles.root}>
-      <SkyView handleRef={handle} orientationRef={compass ? orientation : undefined} bottomInset={controlsBottom + 132} topInset={insets.top + 56} initial={opening}
-        onTapObject={() => setPanel('none')} />
+      <SkyView handleRef={handle} rememberView orientationRef={compass ? orientation : undefined} bottomInset={controlsBottom + 132} topInset={insets.top + 56} initial={opening}
+        onTapObject={() => { setPanel('none'); setDetent('collapsed'); }} onLongPress={longPress} />
       {compass ? <CompassSession orientationRef={orientation} onMessage={setCompassNote} onUnavailable={() => { setCompass(false); setCompassNote('Motion sensors aren’t available on this device. Drag to explore.'); }} /> : null}
       {compassNote ? <Pressable onPress={() => setCompassNote(null)} style={[styles.note, { top: insets.top + 58 }]} accessibilityRole="button"><Text style={styles.noteText}>{compassNote}</Text></Pressable> : null}
 
@@ -119,33 +184,6 @@ export default function SkyScreen() {
 
       {panel === 'layers' ? <LayersPanel top={insets.top + 58} maxHeight={height * 0.58} /> : null}
 
-      {selected && location ? (
-        <View style={[styles.card, { bottom: controlsBottom + 138 }]}>
-          <Pressable testID="sky-selection" onPress={() => router.push({ pathname: '/object/[id]', params: { id: selected.id } })}
-            style={({ pressed }) => [styles.cardHead, press(pressed)]} accessibilityRole="button" accessibilityLabel={`${selected.name}. Open details.`}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.cardTitle} numberOfLines={1}>{selected.name}</Text>
-              <Text style={type.caption} numberOfLines={2}>{TYPE_NAMES[selected.type]} · {location.explanation}</Text>
-            </View>
-            <Icon name="chevron" size={20} />
-          </Pressable>
-          <View style={styles.cardActions}>
-            <Pressable testID="sky-locate" onPress={() => requestFocus(selected.id)} style={({ pressed }) => [styles.cardAction, press(pressed)]} accessibilityRole="button" accessibilityLabel={`Center ${selected.name}`}>
-              <Icon name="target" size={18} tint={color.peach} /><Text style={styles.cardActionText}>Locate</Text>
-            </Pressable>
-            <Pressable testID="sky-learn" onPress={() => router.push({ pathname: '/object/[id]', params: { id: selected.id } })} style={({ pressed }) => [styles.cardAction, press(pressed)]} accessibilityRole="button" accessibilityLabel={`Learn about ${selected.name}`}>
-              <Icon name="info" size={18} tint={color.peach} /><Text style={styles.cardActionText}>Learn</Text>
-            </Pressable>
-            <Pressable testID="sky-save" onPress={() => toggleFavorite(selected.id)} style={({ pressed }) => [styles.cardAction, press(pressed)]} accessibilityRole="button" accessibilityState={{ selected: favorite }} accessibilityLabel={favorite ? `Remove ${selected.name} from favorites` : `Save ${selected.name} to favorites`}>
-              <Icon name="star" size={18} tint={color.peach} filled={favorite} /><Text style={styles.cardActionText}>{favorite ? 'Saved' : 'Save'}</Text>
-            </Pressable>
-            <Pressable testID="sky-deselect" onPress={() => select(null)} style={({ pressed }) => [styles.cardClose, press(pressed)]} accessibilityRole="button" accessibilityLabel="Clear the selection" hitSlop={6}>
-              <Icon name="close" size={16} tint={color.textSecondary} />
-            </Pressable>
-          </View>
-        </View>
-      ) : null}
-
       <View style={[styles.controls, { bottom: controlsBottom }]}>
         <IconButton testID="sky-compass" name="navigate" label={compass ? 'Turn off compass mode' : 'Follow the compass'} onPress={() => setCompass(!compass)} active={compass} size={50} iconSize={23} />
         <IconButton testID="sky-time" name="calendar" label="Time Travel" onPress={() => router.push('/time-travel')} size={50} iconSize={23} />
@@ -162,7 +200,16 @@ export default function SkyScreen() {
         <IconButton testID="sky-more" name="dots" label="Open navigation" onPress={() => setPanel(panel === 'nav' ? 'none' : 'nav')} active={panel === 'nav'} size={50} iconSize={23} />
       </View>
 
+      <SkySheet handleRef={handle} detent={detent} onDetent={(d) => { setDetent(d); if (d !== 'collapsed') setPanel('none'); }} dockBottom={controlsBottom + 138} topInset={insets.top} card={card}
+        onLayers={() => { setDetent('collapsed'); setPanel('layers'); }} />
+
       {panel === 'nav' ? <TabBar floating /> : null}
+      {menu && handle.current?.frame() ? (
+        <SkyContextMenu point={menu} frame={handle.current.frame()!} screen={{ width, height }} onClose={() => setMenu(null)}
+          onPick={(id) => { setMenu(null); ensureObject(id).then((o) => { if (o) select(id); }).catch(() => {}); }}
+          onCentre={() => { handle.current?.centreOn(menu.x, menu.y); setMenu(null); }} />
+      ) : null}
+      {adding && selected ? <AddToList id={selected.id} name={selected.name} onClose={() => setAdding(false)} /> : null}
     </View>
   );
 }
@@ -176,13 +223,6 @@ const styles = StyleSheet.create({
   note: { position: 'absolute', left: 74, right: 74, padding: 10, borderRadius: 14, backgroundColor: 'rgba(11,15,27,0.88)' },
   noteText: { fontFamily: font.medium, fontSize: 12.5, lineHeight: 17, color: color.text, textAlign: 'center' },
   modes: { flex: 1, marginHorizontal: 10 },
-  card: { position: 'absolute', left: 18, right: 18, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 6, borderRadius: 18, backgroundColor: 'rgba(11,15,27,0.92)', borderWidth: StyleSheet.hairlineWidth, borderColor: color.hairlineStrong },
-  cardHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  cardActions: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.hairline },
-  cardAction: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 40 },
-  cardActionText: { fontFamily: font.medium, fontSize: 13, color: color.text },
-  cardClose: { width: 34, height: 40, alignItems: 'center', justifyContent: 'center' },
-  cardTitle: { fontFamily: font.serif, fontSize: 22, lineHeight: 26, color: color.text },
   controls: { position: 'absolute', left: 18, right: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   identify: { width: 66, height: 66, borderRadius: 33, alignItems: 'center', justifyContent: 'center', borderWidth: 1.6, borderColor: '#F0A070', backgroundColor: 'rgba(44,24,16,0.62)', shadowColor: '#F59A5C', shadowOpacity: 0.62, shadowRadius: 15, shadowOffset: { width: 0, height: 0 } },
   ar: { width: 50, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(14,19,32,0.62)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.18)' },

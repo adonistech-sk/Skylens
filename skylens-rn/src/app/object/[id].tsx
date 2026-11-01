@@ -1,19 +1,26 @@
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BodyId, compass16 } from '../../astronomy/core';
 import { observe } from '../../astronomy/locator';
-import { bodyEditorial, bodyIdOf, constellationMeaning, constellationName, describeObject, distanceLightYears, object, objectNote, SkyObject, TYPE_NAMES } from '../../data/catalog';
-import { IconButton, SegmentedControl } from '../../design/components';
+import { coordinatesOf, horizontalOf, moonFacts, Visibility, visibilityTimeline } from '../../astronomy/observing';
+import { bodyEditorial, bodyIdOf, constellationMeaning, constellationName, describeObject, distanceLightYears, objectNote, SkyObject, TYPE_NAMES } from '../../data/catalog';
+import { factsFor } from '../../data/objectFacts';
+import { relatedObjects } from '../../data/related';
+import { useObject } from '../../data/useObject';
+import { IconButton, Row, SegmentedControl } from '../../design/components';
 import { Icon, IconName } from '../../design/Icon';
 import { Pop, Reveal, Tap } from '../../design/motion';
 import { heroFor } from '../../design/images';
+import { ObjectThumb } from '../../design/Screen';
 import { color, font, type } from '../../design/tokens';
+import { AltitudeChart } from '../../features/detail/AltitudeChart';
+import { AddToList } from '../../features/lists/AddToList';
 import { SkyView } from '../../features/sky/SkyView';
-import { formatDec, formatDistanceAU, formatDistanceLy, formatMagnitude, formatRA, formatSize, formatTime } from '../../state/format';
+import { formatDec, formatDistanceAU, formatDistanceLy, formatLongDate, formatMagnitude, formatRA, formatSize, formatTime } from '../../state/format';
 import { requestFocus, skyTime, toggleFavorite, useObserver, useStore } from '../../state/store';
 
 // Morphology the catalog's type column doesn't carry, for the showpiece galaxies.
@@ -50,9 +57,28 @@ export default function ObjectDetail() {
   const favorites = useStore((s) => s.favorites);
   const use24h = useStore((s) => s.use24h);
   const [tab, setTab] = useState<'overview' | 'observing' | 'details'>('overview');
-  const o = useMemo(() => object(id), [id]);
+  const { object: o, loading } = useObject(id);
+  const [adding, setAdding] = useState(false);
   const date = new Date(skyTime());
-  const info = useMemo(() => (o ? observe(o, date, observer) : null), [o, observer, Math.floor(date.getTime() / 60000)]);
+  const minute = Math.floor(date.getTime() / 60000);
+  const info = useMemo(() => (o ? observe(o, date, observer) : null), [o?.id, observer, minute]);
+  // A night of ephemeris samples is real work, so the tab paints first and the chart follows.
+  const [timeline, setTimeline] = useState<Visibility | null>(null);
+  const quarter = Math.floor(minute / 15);
+  useEffect(() => {
+    if (!o || tab !== 'observing') return;
+    let live = true;
+    const id = setTimeout(() => { const v = visibilityTimeline(o, new Date(skyTime()), observer, observer.timeZone); if (live) setTimeline(v); }, 30);
+    return () => { live = false; clearTimeout(id); };
+  }, [o?.id, observer, tab, quarter]);
+  const coordinates = useMemo(() => (o && info?.j2000 && tab === 'details' ? coordinatesOf(info.j2000, date, horizontalOf(o, date, observer)) : null), [o?.id, observer, tab, minute]);
+  const facts = useMemo(() => (o && tab === 'details' ? factsFor(o, bodyIdOf(o.id), date, observer) : []), [o?.id, observer, tab, minute]);
+  const related = useMemo(() => (o && tab === 'overview' ? relatedObjects(o, info?.j2000 ?? null) : []), [o?.id, tab, bodyIdOf(id) ? Math.floor(minute / 1440) : 0]);
+  const moon = useMemo(() => (bodyIdOf(id) === 'moon' && tab === 'observing' ? moonFacts(date) : null), [id, tab, Math.floor(minute / 60)]);
+
+  if (!o && loading) {
+    return <View style={[styles.root, { alignItems: 'center', justifyContent: 'center' }]}><ActivityIndicator color={color.peach} accessibilityLabel="Loading this star" /></View>;
+  }
 
   if (!o || !info) {
     return (
@@ -85,7 +111,7 @@ export default function ObjectDetail() {
     <View style={styles.root}>
       <View style={styles.hero}>
         {hero ? <Image source={hero} style={StyleSheet.absoluteFill} contentFit="cover" />
-          : <SkyView key={o.id} interactive={false} showCompass={false} hideGround focusId={o.id} initial={{ fov: o.type === 'constellation' ? 42 : 24 }} />}
+          : <SkyView key={o.id} interactive={false} showCompass={false} hideGround focusId={o.id} bottomInset={150} initial={{ fov: o.type === 'constellation' ? 42 : 24 }} />}
         <LinearGradient pointerEvents="none" colors={['rgba(6,10,20,0.35)', 'rgba(6,10,20,0)', 'rgba(6,10,20,0)', color.base]} locations={[0, 0.22, 0.52, 0.9]} style={StyleSheet.absoluteFill} />
       </View>
       <ScrollView contentContainerStyle={{ paddingTop: 262, paddingBottom: 128 + insets.bottom }} showsVerticalScrollIndicator={false}>
@@ -104,6 +130,12 @@ export default function ObjectDetail() {
               <Cell line icon="size" label={size ? 'Size (apparent)' : 'Distance'} value={size ?? (ly ? `${Math.round(ly).toLocaleString('en-US')} ly` : '—')} />
               <Cell line icon="diamond" label="Constellation" value={place} />
             </View>
+            {related.length ? (
+              <View testID="detail-related" style={{ marginTop: 18 }}>
+                <Text style={type.heading}>Related</Text>
+                {related.map((r, i) => <Row key={r.object.id} leading={<ObjectThumb object={r.object} size={46} />} title={r.object.name} subtitle={r.reason} last={i === related.length - 1} onPress={() => router.push({ pathname: '/object/[id]', params: { id: r.object.id } })} />)}
+              </View>
+            ) : null}
           </View>
         ) : tab === 'observing' ? (
           <View style={styles.section}>
@@ -117,15 +149,22 @@ export default function ObjectDetail() {
               {rts?.rise ? <Fact label="Next rise" value={formatTime(rts.rise, tz, use24h)} /> : null}
               {rts?.transit ? <Fact label="Highest" value={`${formatTime(rts.transit, tz, use24h)}${rts.transitAltitude !== null ? `, ${Math.round(rts.transitAltitude)}°` : ''}`} /> : null}
               {rts?.set ? <Fact label="Next set" value={formatTime(rts.set, tz, use24h)} /> : null}
+              {moon?.nextFull ? <Fact label="Next full Moon" value={formatLongDate(moon.nextFull, tz)} /> : null}
+              {moon?.nextNew ? <Fact label="Next new Moon" value={formatLongDate(moon.nextNew, tz)} /> : null}
             </View>
+            {timeline ? <View style={{ marginTop: 16 }}><AltitudeChart data={timeline} now={date.getTime()} timeZone={tz} use24h={use24h} /></View> : <ActivityIndicator color={color.peach} style={{ marginTop: 24 }} accessibilityLabel="Working out the night" />}
           </View>
         ) : (
           <View style={styles.section}>
             {info.j2000 ? <Fact label="Right ascension (J2000)" value={formatRA(info.j2000.raHours)} /> : null}
             {info.j2000 ? <Fact label="Declination (J2000)" value={formatDec(info.j2000.decDeg)} /> : null}
-            {o.star?.spectralType ? <Fact label="Spectral type" value={o.star.spectralType} /> : null}
-            {o.star?.colorIndex !== null && o.star?.colorIndex !== undefined ? <Fact label="B−V colour index" value={o.star.colorIndex.toFixed(2)} /> : null}
-            {distance ? <Fact label="Distance" value={distance} /> : null}
+            {coordinates ? <Fact label="Right ascension (of date)" value={formatRA(coordinates.ofDate.raHours)} /> : null}
+            {coordinates ? <Fact label="Declination (of date)" value={formatDec(coordinates.ofDate.decDeg)} /> : null}
+            {coordinates?.horizontal ? <Fact label="Azimuth, altitude" value={`${coordinates.horizontal.azimuth.toFixed(1)}°, ${coordinates.horizontal.altitude.toFixed(1)}°`} /> : null}
+            {coordinates ? <Fact label="Ecliptic longitude, latitude" value={`${coordinates.eclipticLongitude.toFixed(2)}°, ${coordinates.eclipticLatitude.toFixed(2)}°`} /> : null}
+            {coordinates ? <Fact label="Galactic longitude, latitude" value={`${coordinates.galacticLongitude.toFixed(2)}°, ${coordinates.galacticLatitude.toFixed(2)}°`} /> : null}
+            {facts.map((f) => <Fact key={f.label} label={f.label} value={f.value} />)}
+            {distance && !facts.some((f) => f.label.startsWith('Distance')) ? <Fact label="Distance" value={distance} /> : null}
             {editorial?.facts.map((f) => <Fact key={f.label} label={f.label} value={f.value} />)}
             {o.designations.length ? <Fact label="Also known as" value={o.designations.slice(0, 5).join(', ')} /> : null}
             {editorial?.learn ? <Text style={[styles.copy, { marginTop: 14 }]}>{editorial.learn}</Text> : null}
@@ -137,8 +176,10 @@ export default function ObjectDetail() {
         <IconButton name="back" label="Back" glass={false} onPress={() => (router.canGoBack() ? router.back() : router.replace('/sky'))} iconSize={24} />
         <View style={{ flex: 1 }} />
         <Pop active={favorite}><IconButton testID="detail-favorite" name="heart" label={favorite ? 'Remove from favorites' : 'Add to favorites'} glass={false} active={favorite} filled={favorite} iconSize={27} onPress={() => toggleFavorite(o.id)} /></Pop>
+        <IconButton testID="detail-list" name="plus" label="Add to a list" glass={false} onPress={() => setAdding(true)} iconSize={27} />
         <IconButton name="share" label="Share" glass={false} onPress={share} iconSize={27} />
       </View>
+      {adding ? <AddToList id={o.id} name={o.name} onClose={() => setAdding(false)} /> : null}
       <View style={[styles.actions, { paddingBottom: Math.max(insets.bottom, 14) + 8 }]}>
         <Tap testID="find-in-sky" disabled={cannotFind} accessibilityRole="button" accessibilityLabel="Find in Sky" onPress={find} style={styles.find}>
           <Icon name="target" size={23} />

@@ -3,7 +3,7 @@
 // when simulated time moves enough to matter on screen.
 import { ALL_BODIES, altitude, angleBetween, appearance, BodyId, bodyName, equatorialVector, horizontalVector, j2000ToHorizon, Mat3, moonPhase, mul, Observer, position, transpose, Vec3 } from '../../astronomy/core';
 import { Camera, cameraScale, pointsPerDegree, project, unproject } from '../../astronomy/camera';
-import { constellations, deepSky, namedStars, ObjectType, properName, rememberDeepStar, SkyObject, starDirection, starMetaEntries, stars, StarTable } from '../../data/catalog';
+import { constellations, deepSky, namedStars, ObjectType, properName, rememberDeepStar, SkyObject, starDirection, starMetaEntries, stars, StarTable, yearsSinceJ2000 } from '../../data/catalog';
 import { starIndex, visibleCells } from '../../data/catalogs';
 import { rowOfTile, StarTile } from '../../data/catalogs/deepPack';
 import { CELL_COUNT } from '../../data/catalogs/grid';
@@ -65,7 +65,7 @@ export function buildStarField(table: StarTable, years: number): StarField {
   return { years, xyz };
 }
 
-export const yearsSinceJ2000 = (time: number) => (time - 946_728_000_000) / (365.25 * 86_400_000);
+export { yearsSinceJ2000 };
 
 /** 0 full night, 1 full daylight. From the conventional twilight stages. */
 export function skyBrightness(sunAltitude: number): number {
@@ -187,22 +187,25 @@ export interface HitContext {
  * the last frame drew can be chosen, so a tap never lands on something the sky isn't showing.
  */
 export function hitTest(x: number, y: number, h: HitContext, radius = 30): Hit | null {
+  return hitCandidates(x, y, h, radius, 1)[0] ?? null;
+}
+
+/** Everything near a point, best first, for a long press that lands between objects. */
+export function hitCandidates(x: number, y: number, h: HitContext, radius = 30, limit = 4): Hit[] {
   const { camera, moment, field, layers } = h;
-  if (y > h.bottomEdge) return null;
-  if (layers.ground && unproject(camera, x, y)[2] < -0.01) return null;
+  if (y > h.bottomEdge) return [];
+  if (layers.ground && unproject(camera, x, y)[2] < -0.01) return [];
   const label = labelAt(h.labels, x, y);
-  if (label) return { id: label.candidate.id!, x, y, distance: 0 };
   const table = stars();
   const cam = mulMatFast(camera.orientation, moment.matrix);
   const scale = cameraScale(camera);
-  let best: Hit | null = null, bestScore = Infinity;
+  const found: { hit: Hit; score: number }[] = [];
+  if (label) found.push({ hit: { id: label.candidate.id!, x, y, distance: 0 }, score: -Infinity });
   const consider = (id: string, px: number, py: number, weight: number) => {
     const d = Math.hypot(px - x, py - y);
     if (d > radius) return false;
-    const s = d + weight;
-    if (s >= bestScore) return false;
-    bestScore = s;
-    best = { id, x: px, y: py, distance: d };
+    if (found.some((f) => f.hit.id === id)) return false;
+    found.push({ hit: { id, x: px, y: py, distance: d }, score: d + weight });
     return true;
   };
   if (layers.planets) {
@@ -236,7 +239,7 @@ export function hitTest(x: number, y: number, h: HitContext, radius = 30): Hit |
     const p = project(camera, mul(moment.matrix, d.vec));
     if (p) consider(d.object.id, p.x, p.y, 2);
   }
-  return best;
+  return found.sort((a, b) => a.score - b.score).slice(0, limit).map((f) => f.hit);
 }
 
 export function mulMatFast(a: Mat3, b: Mat3): Mat3 {
@@ -283,6 +286,20 @@ export function chartStarList() {
     chartList = list.sort((a, b) => a.mag - b.mag);
   }
   return chartList;
+}
+
+/** Degrees from a constellation's centre to the farthest star of its figure. */
+export function constellationSpan(id: string, field: StarField): number {
+  const g = constellationGeometry().find((c) => c.id === id);
+  if (!g) return 20;
+  let widest = 0;
+  for (const seg of g.segments) {
+    for (const i of seg) {
+      const a = i * 3;
+      widest = Math.max(widest, angleBetween(g.center, [field.xyz[a], field.xyz[a + 1], field.xyz[a + 2]]));
+    }
+  }
+  return widest;
 }
 
 export interface ConstellationGeometry { id: string; name: string; segments: [number, number][]; center: Vec3 }

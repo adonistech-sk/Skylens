@@ -166,3 +166,20 @@ Added for the PRD's stage gate:
 | Screenshots of Observe, Explore, Deep Atlas, daytime, selection | Web in `evidence/stage1/`. Device captures pending |
 | Actual frame timings and memory | **Not met** on hardware. Instrument is in the Layers panel |
 | Source and asset licensing recorded | **Met** as records, `V1_SOURCE_MATRIX.md`. Rights decisions stay open |
+
+## After Stage 2
+
+Evidence is logic tests and web flows on Windows. Nothing here has run on iOS, so device behaviour stays unproven. Risks are listed in `V1_STAGE2_REPORT.md`.
+
+| ID | Status now | Evidence | Still open |
+|---|---|---|---|
+| DISC-001 Search | `VERIFIED_IMPLEMENTED` in logic | `src/data/search.ts`, `tests/search-v1.test.ts`: all 76,806 pack stars found exactly, recents, categories | Pack stars have numbers and 43 names only, because the source has nothing else |
+| DISC-002 Object Details | `PARTIAL` | `src/data/objectFacts.ts`, `src/features/detail/AltitudeChart.tsx`, type-specific facts, related objects | Gallery needs more cleared images. No comet, asteroid or satellite layout, because those objects don't exist yet |
+| DISC-003 Sky panel | `PARTIAL` | `src/features/sky/SkySheet.tsx`, three detents, drag, flick, tap outside, close, VoiceOver actions, flows | iOS gestures and keyboard unproven |
+| DISC-004 Explore | `PARTIAL` | Unchanged | Satellites wait for Stage 4 |
+| DISC-005 Favorites and lists | `VERIFIED_IMPLEMENTED` on web | `src/state/lists.ts`, `src/app/list/[id].tsx`: create, rename, reorder, delete, reload, damaged-save recovery | Restart on iOS unproven |
+| SKY-008 Selection | `PARTIAL` | Long press, neighbour list, step arrows, faint-star route to Deep Atlas, constellation highlight, turn-by-turn text | Device accuracy |
+| SKY-009 Gestures | `PARTIAL` | Flows cover long press, drag after long press, pan with the panel open, pinch, tap | `DEVICE_NOT_TESTED` |
+| J01 Identify | `PARTIAL` | List and favorites added | Compass on hardware |
+| J02 Constellation | `PARTIAL` | Highlight, boundary, related stars | Art for 87 constellations, story |
+| J03 Deep Atlas search | `PARTIAL` | Search reaches every star, faint star routes to Deep Atlas at a view that draws it | FOV overlay, Stage 5 |

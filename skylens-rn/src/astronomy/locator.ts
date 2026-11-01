@@ -1,6 +1,6 @@
 // Ported from SkySession/Locator.swift: "where is this right now, and can I see it?".
-import { bodyIdOf, SkyObject } from '../data/catalog';
-import { altitude, appearance, compassName, constellationOf, Equatorial, equatorialVector, horizontalVector, Horizontal, j2000ToHorizon, mul, Observer, position, Vec3, vectorHorizontal } from './core';
+import { bodyIdOf, directionAt, SkyObject, yearsSinceJ2000 } from '../data/catalog';
+import { altitude, appearance, BodyId, compassName, constellationOf, Equatorial, equatorialVector, horizontalVector, Horizontal, j2000ToHorizon, mul, Observer, position, Vec3, vectorHorizontal } from './core';
 import { altitudeRange, nextRise, riseTransitSet, RiseTransitSet, Target } from './night';
 
 export type LocationStatus = 'visible' | 'aboveHorizonInDaylight' | 'belowHorizon' | 'neverRises' | 'unavailable';
@@ -34,9 +34,15 @@ const targetOf = (o: SkyObject): Target | null => {
 export function directionOf(o: SkyObject, date: Date, observer: Observer): Vec3 | null {
   const b = bodyIdOf(o.id);
   if (b) return horizontalVector(position(b, date, observer).geometric);
-  if (o.position) return mul(j2000ToHorizon(date, observer), equatorialVector(o.position.raHours, o.position.decDeg));
-  return null;
+  if (!o.position) return null;
+  // A star is drawn at its place for this date, so its marker has to be there too. Without
+  // proper motion the ring drifts off a fast star as Time Travel leaves J2000.
+  const place = o.star ? directionAt(o.position.raHours * 15, o.position.decDeg, o.star.pmRA, o.star.pmDec, yearsSinceJ2000(date.getTime())) : equatorialVector(o.position.raHours, o.position.decDeg);
+  return mul(j2000ToHorizon(date, observer), place);
 }
+
+/** Whether twilight or daylight hides an object above the horizon. */
+export const washedOut = (body: BodyId | null, sunAltitude: number) => sunAltitude > -6 && body !== 'moon' && body !== 'venus' && body !== 'sun';
 
 const capitalized = (s: string) => s[0].toUpperCase() + s.slice(1);
 
@@ -52,7 +58,7 @@ export function locate(o: SkyObject, date: Date, observer: Observer): ObjectLoca
     const name = compassName(h.azimuth);
     const place = `${Math.round(h.altitude)}° above the ${name.includes('th') && name.length > 5 ? name : `${name}ern`} horizon`;
     if (b === 'sun') return { horizontal: h, status: 'visible', explanation: `${capitalized(place)}. Never look at it without certified protection.`, nextRise: null };
-    if (sun > -6 && b !== 'moon' && b !== 'venus') {
+    if (washedOut(b, sun)) {
       return { horizontal: h, status: 'aboveHorizonInDaylight', explanation: `${capitalized(place)}, but the sky is too bright. It will be easier to see after dark.`, nextRise: null };
     }
     return { horizontal: h, status: 'visible', explanation: `${capitalized(place)}.`, nextRise: null };

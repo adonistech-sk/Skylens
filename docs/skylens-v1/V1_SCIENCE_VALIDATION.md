@@ -54,6 +54,21 @@ Each named exception is listed in the test, so a new outlier fails instead of pa
 | Boundaries against Astronomy Engine | 1,498 of 1,500 random points agree, none unclaimed |
 | Grid poles | Galactic pole within 2′, galactic centre within 2′, ecliptic pole within 1′ of published values |
 
+## Added in Stage 2
+
+| Check | Result |
+|---|---|
+| A marker on a fast star under Time Travel | Under 0.5″ from the drawn star for Barnard's Star and Sirius, in 1815 and 2150. Before the fix it ignored proper motion |
+| All 88 constellation areas | 41,253.0 square degrees against 41,252.96 for the sphere |
+| Seven IAU constellation areas, including both polar ones | Within 2% |
+| Altitude timeline against the engine | Peak within 21 minutes of transit, and within 1° of its altitude. Sampled every 20 minutes |
+| Galactic place of Sirius | Within 0.1° of 227.23°, −8.89° |
+| Absolute magnitude | Sirius and Vega within 0.1 of published values |
+| Elongation of Venus | Within 0.5° of the engine's own function |
+| Discovery | Every suggestion in three modes is above the horizon, visible by `locate()`, and states an altitude within 1.2° |
+
+These compare against published values or the engine rather than a new JPL pull. They check arithmetic built on positions the JPL fixtures already cover.
+
 ## Not verified
 
 | Item | Why |
