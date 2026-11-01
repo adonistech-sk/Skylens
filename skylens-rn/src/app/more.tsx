@@ -26,6 +26,7 @@ export default function More() {
         <Row testID="more-location" leading={<Lead icon="pin" />} title="Location" subtitle={observer.name} onPress={() => router.push('/location')} />
         <Row leading={<Lead icon="nightEye" />} title="Night vision" subtitle="Red star map that protects dark adaptation" right={<Toggle value={nightVision} onChange={setNightVision} label="Night vision" />} />
         <Row leading={<Lead icon="calendar" />} title="24-hour time" right={<Toggle value={use24h} onChange={setUse24h} label="24-hour time" />} />
+        <Row testID="more-sky-engine" leading={<Lead icon="gear" />} title="Sky engine" subtitle="Test or turn off new sky features" onPress={() => router.push('/sky-engine')} />
         <Row leading={<Lead icon="doc" />} title="Credits and data sources" subtitle="Imagery, catalogs and licenses" onPress={() => router.push('/credits')} />
         <Row leading={<Lead icon="shield" />} title="Privacy" onPress={() => router.push('/privacy')} last />
       </View>

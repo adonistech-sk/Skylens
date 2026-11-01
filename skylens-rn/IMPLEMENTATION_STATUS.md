@@ -86,3 +86,20 @@ Committed as `1329019`, with fixes up to `ff8ab8e`. Details are in `VISUAL_COMPA
 | Small and large iPhone layouts | Spot-checked on web at 375×667 and 440×956 |
 
 At `ff8ab8e`: typecheck clean and 48 of 48 unit tests. The 14 web flows last ran before `ff8ab8e`, which changed no behaviour they cover.
+
+## SkyLens V1 Stage 1
+
+On commit after `2cb0682`. Plans, audit and results are in `../docs/skylens-v1/`. Web and logic evidence unless stated. **No iOS run yet.**
+
+| Area | Status |
+|---|---|
+| Observe, Explore, Deep Atlas | Tested web, Tested logic |
+| Layers panel, 18 layers, 3 sliders, per-mode persistence | Tested web. Every switch changes the picture |
+| Spatial index, 1,536 cells, flag `catalogsV1` | Tested logic: 0 missed of 304,931 |
+| Deep star pack, 76,806 Hipparcos stars, flag `deepPack` | Tested web, Tested logic. iOS file reading unproven |
+| Grids, boundaries, atlas symbols, readout | Tested web, Tested logic |
+| Label decluttering | Tested logic |
+| Selection card, off-screen guide, constellation name tap | Tested web |
+| Pinch and double tap about the fingers | Tested web, Tested logic. **Not tested on iOS** |
+| Rollback in More → Sky engine | Tested web |
+| Frame time, memory, battery on an iPhone | **Blocked:** needs a device |

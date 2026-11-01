@@ -30,6 +30,7 @@ uniform float framing;
 uniform float framingY;
 uniform float framingScale;
 uniform float framingAz;
+uniform float atmosphere;
 
 const float PI = 3.14159265;
 
@@ -61,7 +62,7 @@ half4 main(float2 p) {
   float glowAlt = framing > 0.5 ? min(altDeg, screenAlt) : altDeg;
 
   // Deep midnight navy, lifting to indigo and a dusky mauve toward the skyline.
-  float lift = exp(-max(glowAlt, 0.0) / 24.0);
+  float lift = atmosphere * exp(-max(glowAlt, 0.0) / 24.0);
   float3 base = mix(float3(0.016, 0.026, 0.082), float3(0.070, 0.070, 0.205), lift);
   base = mix(base, float3(0.205, 0.105, 0.205), lift * lift * lift);
 
@@ -75,15 +76,15 @@ half4 main(float2 p) {
   sky = mix(sky, dusk, twilight * (0.35 + 0.65 * max(sunAngle * 0.5 + 0.5, 0.0)));
 
   // A low band of air glow, warm at the very skyline.
-  sky += float3(0.21, 0.085, 0.10) * night * exp(-max(glowAlt, 0.0) / 3.6);
+  sky += atmosphere * float3(0.21, 0.085, 0.10) * night * exp(-max(glowAlt, 0.0) / 3.6);
 
   // Moonlight lifts the sky a little around the Moon.
   float moonAngle = max(dot(hz, moonDir), 0.0);
-  sky += float3(0.06, 0.075, 0.11) * moonGlow * (0.25 + 1.2 * pow(moonAngle, 8.0));
+  sky += atmosphere * float3(0.06, 0.075, 0.11) * moonGlow * (0.25 + 1.2 * pow(moonAngle, 8.0));
 
   // Extinction: light fades through the thick air depth the horizon.
   float extinction = exp(-0.11 * air);
-  float visible = mapStrength * night * night * mix(0.35, 1.0, extinction);
+  float visible = mapStrength * night * night * mix(mix(1.0, 0.35, atmosphere), 1.0, extinction);
 
   // The Milky Way's measured brightness, graded from indigo through rose to a warm core.
   float l = dot(map, float3(0.34, 0.33, 0.33));

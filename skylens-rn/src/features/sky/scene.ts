@@ -1,9 +1,14 @@
 // Everything the renderer needs for one instant, free of any drawing API so that it
 // can be tested in Node. Planets are the expensive part, so they are recomputed only
 // when simulated time moves enough to matter on screen.
-import { ALL_BODIES, altitude, appearance, BodyId, bodyName, equatorialVector, horizontalVector, j2000ToHorizon, Mat3, moonPhase, mul, Observer, position, Vec3 } from '../../astronomy/core';
-import { Camera, cameraScale, project } from '../../astronomy/camera';
-import { constellations, deepSky, namedStars, properName, SkyObject, starDirection, stars, StarTable } from '../../data/catalog';
+import { ALL_BODIES, altitude, angleBetween, appearance, BodyId, bodyName, equatorialVector, horizontalVector, j2000ToHorizon, Mat3, moonPhase, mul, Observer, position, transpose, Vec3 } from '../../astronomy/core';
+import { Camera, cameraScale, pointsPerDegree, project, unproject } from '../../astronomy/camera';
+import { constellations, deepSky, namedStars, ObjectType, properName, rememberDeepStar, SkyObject, starDirection, starMetaEntries, stars, StarTable } from '../../data/catalog';
+import { starIndex, visibleCells } from '../../data/catalogs';
+import { rowOfTile, StarTile } from '../../data/catalogs/deepPack';
+import { CELL_COUNT } from '../../data/catalogs/grid';
+import { Layers, SkyMode } from '../../state/skyModes';
+import { labelAt, PlacedLabel } from './labels';
 
 export interface BodyState {
   id: BodyId;
@@ -34,7 +39,10 @@ export function computeMoment(time: number, observer: Observer): SkyMoment {
     const p = position(id, date, observer);
     const a = appearance(id, date);
     return {
-      id, name: bodyName(id), dir: horizontalVector(p.apparent), magnitude: a.magnitude, angularDiameter: a.angularDiameter,
+      // Airless, like the stars and the selection ring. Drawing the refracted position put a
+      // body up to 36 arcminutes from its own marker near the horizon. Rise, set and altitude
+      // text still use the refracted value.
+      id, name: bodyName(id), dir: horizontalVector(p.geometric), magnitude: a.magnitude, angularDiameter: a.angularDiameter,
       illuminated: a.illuminatedFraction, altitude: p.apparent.altitude,
     };
   });
@@ -72,45 +80,161 @@ export function limitingMagnitude(fov: number, brightness: number, base = 5.6): 
 
 export const starRadius = (mag: number, limit: number) => Math.max(0.42, 0.42 * Math.pow(Math.max(0, limit - mag) + 0.5, 0.82));
 
+// ---- What a frame can see ----
+
+export interface SkyQuery { cells: Uint16Array; count: number; tiles: StarTile[] }
+
+/** Largest angle from the centre of the view to a screen corner, with a few points to spare. */
+export function viewHalfAngle(c: Camera): number {
+  const center = unproject(c, c.width / 2, c.height / 2);
+  let widest = 0;
+  for (const [x, y] of [[0, 0], [c.width, 0], [0, c.height], [c.width, c.height]]) {
+    widest = Math.max(widest, angleBetween(center, unproject(c, x, y)));
+  }
+  return widest + 8 / pointsPerDegree(c);
+}
+
+export const newCellBuffer = () => new Uint16Array(CELL_COUNT);
+
+/** The sky cells this camera can see at an epoch. The buffer belongs to the caller. */
+export function querySky(camera: Camera, moment: SkyMoment, years: number, deepFastest: ((cell: number) => number) | null, cells: Uint16Array): SkyQuery {
+  const forward = mul(transpose(moment.matrix), unproject(camera, camera.width / 2, camera.height / 2));
+  const count = visibleCells(forward, viewHalfAngle(camera), years, starIndex().fastest, deepFastest, cells);
+  return { cells, count, tiles: [] };
+}
+
+/** Calls back for every bundled star a query covers down to a limit, brightest first in each cell. */
+export function eachStar(query: SkyQuery | null, limit: number, visit: (row: number) => void): number {
+  const table = stars();
+  let scanned = 0;
+  if (!query) {
+    for (let i = 0; i < table.count; i++) {
+      if (table.mag[i] > limit) break;
+      visit(i);
+      scanned++;
+    }
+    return scanned;
+  }
+  const { starts, rows } = starIndex();
+  for (let c = 0; c < query.count; c++) {
+    const cell = query.cells[c];
+    for (let k = starts[cell], end = starts[cell + 1]; k < end; k++) {
+      const row = rows[k];
+      if (table.mag[row] > limit) break;
+      visit(row);
+      scanned++;
+    }
+  }
+  return scanned;
+}
+
+// ---- Deep sky visibility ----
+
+export type DeepGroup = 'galaxies' | 'clusters' | 'nebulae';
+
+const GROUPS: Partial<Record<ObjectType, DeepGroup>> = {
+  galaxy: 'galaxies', openCluster: 'clusters', globularCluster: 'clusters', starCloud: 'clusters', asterism: 'clusters', doubleStar: 'clusters',
+  nebula: 'nebulae', planetaryNebula: 'nebulae', supernovaRemnant: 'nebulae', clusterNebula: 'nebulae',
+};
+export const deepGroup = (t: ObjectType): DeepGroup => GROUPS[t] ?? 'clusters';
+
+export type Marker = { object: SkyObject; vec: Vec3 };
+
+let allMarkers: Marker[] | null = null;
+/** The whole bundled deep-sky catalog, which Deep Atlas shows. */
+export function atlasMarkers(): Marker[] {
+  allMarkers ??= deepSky.map((object) => ({ object, vec: equatorialVector(object.position!.raHours, object.position!.decDeg) }));
+  return allMarkers;
+}
+
+/** One rule for what is drawn and what can be tapped, so neither can drift from the other. */
+export function visibleDeepSky(mode: SkyMode, layers: Layers, fov: number, brightness: number, overlayOnly: boolean): Marker[] {
+  if (!layers.deepSky || overlayOnly || brightness > 0.4) return [];
+  const on = (m: Marker) => layers[deepGroup(m.object.type)];
+  if (mode === 'atlas') {
+    if (fov > 100) return [];
+    const limit = 5 + 2.6 * Math.log2(100 / fov);
+    return atlasMarkers().filter((m) => on(m) && (m.object.magnitude ?? 11) <= limit);
+  }
+  if (mode === 'observe') return fov > 46 ? [] : deepSkyMarkers().filter((m) => on(m) && (m.object.magnitude ?? 9) <= 5.5);
+  if (fov > 22) return [];
+  const limit = fov > 14 ? 6 : 9;
+  return deepSkyMarkers().filter((m) => on(m) && (m.object.magnitude ?? 9) <= limit);
+}
+
 // ---- Hit testing ----
 
 export interface Hit { id: string; x: number; y: number; distance: number }
 
-/** The object under a tap, favouring what is bright or named over mere proximity. */
-export function hitTest(x: number, y: number, camera: Camera, moment: SkyMoment, field: StarField, showDeepSky: boolean, radius = 30): Hit | null {
+export interface HitContext {
+  camera: Camera;
+  moment: SkyMoment;
+  field: StarField;
+  layers: Layers;
+  mode: SkyMode;
+  /** The faintest star drawn in the last frame. */
+  limit: number;
+  brightness: number;
+  overlayOnly: boolean;
+  query: SkyQuery | null;
+  /** Taps below this line land on the compass, not the sky. */
+  bottomEdge: number;
+  labels: PlacedLabel[];
+}
+
+/**
+ * The object under a tap, favouring what is bright or named over mere proximity. Only what
+ * the last frame drew can be chosen, so a tap never lands on something the sky isn't showing.
+ */
+export function hitTest(x: number, y: number, h: HitContext, radius = 30): Hit | null {
+  const { camera, moment, field, layers } = h;
+  if (y > h.bottomEdge) return null;
+  if (layers.ground && unproject(camera, x, y)[2] < -0.01) return null;
+  const label = labelAt(h.labels, x, y);
+  if (label) return { id: label.candidate.id!, x, y, distance: 0 };
   const table = stars();
   const cam = mulMatFast(camera.orientation, moment.matrix);
   const scale = cameraScale(camera);
   let best: Hit | null = null, bestScore = Infinity;
   const consider = (id: string, px: number, py: number, weight: number) => {
     const d = Math.hypot(px - x, py - y);
-    if (d > radius) return;
+    if (d > radius) return false;
     const s = d + weight;
-    if (s < bestScore) { bestScore = s; best = { id, x: px, y: py, distance: d }; }
+    if (s >= bestScore) return false;
+    bestScore = s;
+    best = { id, x: px, y: py, distance: d };
+    return true;
   };
-  for (const b of moment.bodies) {
-    const p = project(camera, b.dir);
-    if (p) consider(`body:${b.id}`, p.x, p.y, -18);
-  }
-  const limit = limitingMagnitude(camera.fov, 0) ;
-  const n = Math.min(table.count, 6000);
-  for (let i = 0; i < n; i++) {
-    const m = table.mag[i];
-    if (m > limit) break;
-    const ix = i * 3;
-    const vx = cam[0] * field.xyz[ix] + cam[1] * field.xyz[ix + 1] + cam[2] * field.xyz[ix + 2];
-    const vy = cam[3] * field.xyz[ix] + cam[4] * field.xyz[ix + 1] + cam[5] * field.xyz[ix + 2];
-    const vz = cam[6] * field.xyz[ix] + cam[7] * field.xyz[ix + 1] + cam[8] * field.xyz[ix + 2];
-    const k = camera.projection === 'stereographic' ? 1 - vz : -vz;
-    if (k <= 1e-6) continue;
-    const s = scale / k;
-    consider(`star:${table.hip[i]}`, camera.width / 2 + vx * s, camera.height / 2 - vy * s, m * 2.4 - (properName(table.hip[i]) ? 6 : 0));
-  }
-  if (showDeepSky) {
-    for (const d of deepSkyMarkers()) {
-      const p = project(camera, mul(moment.matrix, d.vec));
-      if (p) consider(d.object.id, p.x, p.y, 2);
+  if (layers.planets) {
+    for (const b of moment.bodies) {
+      const p = project(camera, b.dir);
+      if (p) consider(`body:${b.id}`, p.x, p.y, -18);
     }
+  }
+  const stereo = camera.projection === 'stereographic';
+  const place = (px: number, py: number, pz: number, then: (sx: number, sy: number) => void) => {
+    const vz = cam[6] * px + cam[7] * py + cam[8] * pz;
+    const k = stereo ? 1 - vz : -vz;
+    if (k <= 1e-6) return;
+    const s = scale / k;
+    then(camera.width / 2 + (cam[0] * px + cam[1] * py + cam[2] * pz) * s, camera.height / 2 - (cam[3] * px + cam[4] * py + cam[5] * pz) * s);
+  };
+  if (layers.stars) {
+    eachStar(h.query, h.limit, (i) => {
+      const ix = i * 3;
+      place(field.xyz[ix], field.xyz[ix + 1], field.xyz[ix + 2], (sx, sy) => { consider(`star:${table.hip[i]}`, sx, sy, table.mag[i] * 2.4 - (properName(table.hip[i]) ? 6 : 0)); });
+    });
+    for (const t of h.query?.tiles ?? []) {
+      for (let i = 0; i < t.count; i++) {
+        if (t.mag[i] > h.limit) break;
+        // A pack star needs its record kept, because the bundled table doesn't hold it.
+        place(t.xyz[i * 3], t.xyz[i * 3 + 1], t.xyz[i * 3 + 2], (sx, sy) => { if (consider(`star:${t.hip[i]}`, sx, sy, t.mag[i] * 2.4)) rememberDeepStar(rowOfTile(t, i)); });
+      }
+    }
+  }
+  for (const d of visibleDeepSky(h.mode, layers, camera.fov, h.brightness, h.overlayOnly)) {
+    const p = project(camera, mul(moment.matrix, d.vec));
+    if (p) consider(d.object.id, p.x, p.y, 2);
   }
   return best;
 }
@@ -143,6 +267,22 @@ export function namedStarList() {
     });
   }
   return namedList;
+}
+
+let chartList: { hip: number; index: number; name: string; mag: number }[] | null = null;
+/** Deep Atlas also labels stars by Bayer letter, down to what its zoom limits allow. */
+export function chartStarList() {
+  if (!chartList) {
+    const t = stars();
+    const list: { hip: number; index: number; name: string; mag: number }[] = [];
+    for (const [hip, m] of starMetaEntries()) {
+      const index = t.indexByHip.get(hip);
+      const name = m.name ?? m.bayer;
+      if (index !== undefined && name) list.push({ hip, index, name, mag: t.mag[index] });
+    }
+    chartList = list.sort((a, b) => a.mag - b.mag);
+  }
+  return chartList;
 }
 
 export interface ConstellationGeometry { id: string; name: string; segments: [number, number][]; center: Vec3 }

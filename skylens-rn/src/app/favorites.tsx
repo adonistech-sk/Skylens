@@ -10,6 +10,7 @@ import { useStore } from '../state/store';
 export default function Favorites() {
   const insets = useSafeAreaInsets();
   const favorites = useStore((s) => s.favorites);
+  useStore((s) => s.catalogRevision); // Saved pack stars resolve just after launch.
   const objects = favorites.map(object).filter((o) => o !== null);
   return (
     <View style={styles.root}>

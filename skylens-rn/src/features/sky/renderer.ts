@@ -5,11 +5,13 @@ import {
   BlendMode, ClipOp, createPicture, FilterMode, MipmapMode, PaintStyle, PointMode, Skia, SkCanvas, SkFont, SkImage, SkPaint, SkPicture, SkPoint, SkRuntimeEffect, StrokeCap, TileMode, vec,
 } from '@shopify/react-native-skia';
 import { Camera, cameraScale, pointsPerDegree, project, unproject } from '../../astronomy/camera';
-import { Mat3, mul, normalize360, transpose, vectorHorizontal, Vec3 } from '../../astronomy/core';
-import { starColor, stars } from '../../data/catalog';
-import { Layers } from '../../state/store';
+import { angleBetween, DEG, Mat3, mul, normalize360, transpose, vectorHorizontal, Vec3 } from '../../astronomy/core';
+import { ObjectType, starColor, stars } from '../../data/catalog';
+import { labelBudget, labelLimit, Layers, SkyMode, SkySettings } from '../../state/skyModes';
 import { artworkFade, drawArtwork, ORION_BODY_HIP, OrionArtwork } from './artwork';
-import { BodyState, constellationGeometry, deepSkyMarkers, limitingMagnitude, mulMatFast, namedStarList, SkyMoment, skyBrightness, StarField, starRadius } from './scene';
+import { azAlt, boundaryPolygons, gridLabel, gridLines, gridStep, GridKind, gridToJ2000, lonLat } from './grids';
+import { LabelBox, LabelCandidate, LabelStyle, placeLabels, PlacedLabel, PRIORITY } from './labels';
+import { BodyState, chartStarList, constellationGeometry, eachStar, mulMatFast, namedStarList, SkyMoment, skyBrightness, SkyQuery, StarField, starRadius, viewHalfAngle, visibleDeepSky } from './scene';
 import { SKY_SHADER } from './skyShader';
 
 export interface SkyResources {
@@ -24,8 +26,29 @@ export interface SkyResources {
   artwork: OrionArtwork | null;
 }
 
+/** What the mode asks of this frame. */
+export interface FrameChart {
+  mode: SkyMode;
+  settings: SkySettings;
+  /** The faintest star drawn. */
+  limit: number;
+  /** Cells in view, or null for the original full scan. */
+  query: SkyQuery | null;
+  /** The field of view and scale readout. */
+  readout: boolean;
+}
+
+/** Filled in while a frame is drawn. */
+export interface FrameResult { scanned: number; drawn: number; labels: PlacedLabel[] }
+
+export const emptyResult = (): FrameResult => ({ scanned: 0, drawn: 0, labels: [] });
+
 export interface SkyFrame {
   camera: Camera;
+  chart: FrameChart;
+  result: FrameResult;
+  /** The selected object's name, kept on the sky however busy the view is. */
+  selectionName: string | null;
   moment: SkyMoment;
   field: StarField;
   layers: Layers;
@@ -68,7 +91,16 @@ function makePaints() {
   const stroke = Skia.Paint();
   stroke.setStyle(PaintStyle.Stroke);
   stroke.setAntiAlias(true);
-  return { line, lineFocus, fill, text, stroke, points: new Map<string, SkPaint>() };
+  const grid = Skia.Paint();
+  grid.setStyle(PaintStyle.Stroke);
+  grid.setStrokeWidth(0.6);
+  grid.setAntiAlias(true);
+  const dashed = Skia.Paint();
+  dashed.setStyle(PaintStyle.Stroke);
+  dashed.setStrokeWidth(0.7);
+  dashed.setAntiAlias(true);
+  dashed.setPathEffect(Skia.PathEffect.MakeDash([3, 3], 0));
+  return { line, lineFocus, fill, text, stroke, grid, dashed, points: new Map<string, SkPaint>() };
 }
 let paints: ReturnType<typeof makePaints>;
 
@@ -98,6 +130,13 @@ function framingLine(f: SkyFrame) {
   return { y, azimuth: heading.azimuth, scale: 13.5, on: f.framing && y < camera.height + 90 };
 }
 
+/**
+ * The all-sky map is far coarser than a tight view, and at that scale the traces of bright
+ * stars left in it swell into soft blobs that look like nebulae. The chart lets it go before
+ * that happens. Explore keeps it, so that sky stays exactly as it was.
+ */
+const mapFade = (f: SkyFrame) => (f.chart.mode === 'atlas' ? Math.min(1, Math.max(0, (f.camera.fov - 6) / 14)) : 1);
+
 function drawSkyPass(canvas: SkCanvas, f: SkyFrame, r: SkyResources, brightness: number, pass: 'sky' | 'ground') {
   const { camera, moment } = f;
   const line = framingLine(f);
@@ -108,9 +147,9 @@ function drawSkyPass(canvas: SkCanvas, f: SkyFrame, r: SkyResources, brightness:
     ...columns(toJ2000), ...columns(orientationT),
     ...moment.sunDir, ...moment.moonDir,
     brightness, moment.moonFraction * Math.max(0, Math.min(1, (moment.moonDir[2] + 0.02) * 3)),
-    f.layers.milkyWay ? 1.0 : 0.22, pass === 'ground' ? 1 : 0, f.overlayOnly ? 1 : 0, pass === 'ground' ? 1 : 0,
+    (f.layers.milkyWay ? 1.0 : 0.22) * mapFade(f), pass === 'ground' ? 1 : 0, f.overlayOnly ? 1 : 0, pass === 'ground' ? 1 : 0,
     r.skyMap.width(), r.skyMap.height(), r.horizon.width(), r.horizon.height(),
-    line.on ? 1 : 0, line.y, line.scale, line.azimuth,
+    line.on ? 1 : 0, line.y, line.scale, line.azimuth, f.layers.atmosphere || f.overlayOnly ? 1 : 0,
   ];
   const skyMap = r.skyMap.makeShaderOptions(TileMode.Repeat, TileMode.Clamp, FilterMode.Linear, MipmapMode.None);
   const horizon = r.horizon.makeShaderOptions(TileMode.Repeat, TileMode.Clamp, FilterMode.Linear, MipmapMode.None);
@@ -127,11 +166,10 @@ function drawSprite(canvas: SkCanvas, sprite: SkImage, x: number, y: number, rad
   canvas.drawImageRect(sprite, Skia.XYWHRect(0, 0, 64, 64), Skia.XYWHRect(x - radius, y - radius, radius * 2, radius * 2), paint);
 }
 
-function drawStars(canvas: SkCanvas, f: SkyFrame, r: SkyResources, brightness: number, projected: Float32Array, cam: Mat3) {
+function drawStars(canvas: SkCanvas, f: SkyFrame, r: SkyResources, brightness: number, cam: Mat3) {
   const table = stars();
-  const { camera, field } = f;
-  // Faint catalog stars fill in as you zoom, past the naked-eye limit of a wide view.
-  const limit = limitingMagnitude(camera.fov, brightness, 6.1) + Math.max(0, 3.2 * Math.log10(60 / camera.fov)) - (f.moving ? 0.5 : 0);
+  const { camera, field, result } = f;
+  const limit = f.chart.limit;
   const scale = cameraScale(camera);
   const stereo = camera.projection === 'stereographic';
   const w = camera.width, h = camera.height, margin = 8;
@@ -140,39 +178,9 @@ function drawStars(canvas: SkCanvas, f: SkyFrame, r: SkyResources, brightness: n
   const xyz = field.xyz;
   const [m0, m1, m2, m3, m4, m5, m6, m7, m8] = cam;
   const hazeFade = 1 - brightness;
-  for (let i = 0; i < table.count; i++) {
-    const mag = table.mag[i];
-    if (mag > limit) break;
-    const a = i * 3;
-    const px = xyz[a], py = xyz[a + 1], pz = xyz[a + 2];
-    const cz = m6 * px + m7 * py + m8 * pz;
-    const k = stereo ? 1 - cz : -cz;
-    if (k <= 1e-4) { projected[i * 2] = NaN; continue; }
-    const s = scale / k;
-    const x = w / 2 + (m0 * px + m1 * py + m2 * pz) * s;
-    const y = h / 2 - (m3 * px + m4 * py + m5 * pz) * s;
-    projected[i * 2] = x; projected[i * 2 + 1] = y;
-    if (x < -margin || y < -margin || x > w + margin || y > h + margin) continue;
-
+  let drawn = 0;
+  const point = (x: number, y: number, mag: number, bv: number) => {
     const radius = starRadius(mag, limit);
-    if (mag < 2.6) {
-      const [pr, pg, pb] = starColor(table.bv[i]);
-      // Catalog colour, richer for the eye: B-V tints are pale when drawn literally.
-      const grey = (pr + pg + pb) / 3;
-      const cr = Math.min(1, grey + (pr - grey) * 1.9), cg = Math.min(1, grey + (pg - grey) * 1.9), cb = Math.min(1, grey + (pb - grey) * 1.9);
-      const bright = Math.min(1, (2.6 - mag) / 2.6);
-      const core = Math.max(1.5, radius * 1.15);
-      // Additive layers: their peaks must sum near 1, or every bright star clips to white.
-      drawSprite(canvas, r.sprite, x, y, core * (10 + bright * 10), cr, cg, cb, (0.2 + bright * 0.2) * hazeFade + 0.03);
-      drawSprite(canvas, r.sprite, x, y, core * (4 + bright * 3), cr, cg, cb, 0.2 * hazeFade + 0.06);
-      // An opaque core, so the star keeps its catalog colour over the blue figure.
-      paints.fill.setColor(Float32Array.of(cr, cg, cb, 1));
-      canvas.drawCircle(x, y, core * 0.66, paints.fill);
-      paints.fill.setColor(Float32Array.of(Math.min(1, cr + 0.42), Math.min(1, cg + 0.42), Math.min(1, cb + 0.42), 0.9));
-      canvas.drawCircle(x, y, core * 0.34, paints.fill);
-      continue;
-    }
-    const bv = table.bv[i];
     const tone = Number.isNaN(bv) ? 1 : bv < 0.1 ? 0 : bv < 0.8 ? 1 : 2;
     const size = Math.round(Math.min(2.5, radius * 1.7) * 3) / 3;
     const alpha = Math.round(Math.min(1, Math.max(0.05, (limit - mag + 0.25) / 1.3)) * 5) / 5;
@@ -184,13 +192,141 @@ function drawStars(canvas: SkCanvas, f: SkyFrame, r: SkyResources, brightness: n
       buckets.set(key, b);
     }
     b.pts.push(vec(x, y));
+  };
+  const visit = (i: number) => {
+    const a = i * 3;
+    const px = xyz[a], py = xyz[a + 1], pz = xyz[a + 2];
+    const cz = m6 * px + m7 * py + m8 * pz;
+    const k = stereo ? 1 - cz : -cz;
+    if (k <= 1e-4) return;
+    const s = scale / k;
+    const x = w / 2 + (m0 * px + m1 * py + m2 * pz) * s;
+    const y = h / 2 - (m3 * px + m4 * py + m5 * pz) * s;
+    if (x < -margin || y < -margin || x > w + margin || y > h + margin) return;
+    drawn++;
+    const mag = table.mag[i];
+    if (mag < 2.6) {
+      const [pr, pg, pb] = starColor(table.bv[i]);
+      // Catalog colour, richer for the eye: B-V tints are pale when drawn literally.
+      const grey = (pr + pg + pb) / 3;
+      const cr = Math.min(1, grey + (pr - grey) * 1.9), cg = Math.min(1, grey + (pg - grey) * 1.9), cb = Math.min(1, grey + (pb - grey) * 1.9);
+      const bright = Math.min(1, (2.6 - mag) / 2.6);
+      // The chart keeps bright stars crisp at any zoom. A wide glow on an empty field reads
+      // as a nebula, and there is no nebula there.
+      const chart = f.chart.mode === 'atlas';
+      const core = Math.max(1.5, starRadius(mag, chart ? Math.min(limit, 7.5) : limit) * 1.15);
+      // Additive layers: their peaks must sum near 1, or every bright star clips to white.
+      if (!chart) drawSprite(canvas, r.sprite, x, y, core * (10 + bright * 10), cr, cg, cb, (0.2 + bright * 0.2) * hazeFade + 0.03);
+      drawSprite(canvas, r.sprite, x, y, core * (chart ? 3 : 4 + bright * 3), cr, cg, cb, 0.2 * hazeFade + 0.06);
+      // An opaque core, so the star keeps its catalog colour over the blue figure.
+      paints.fill.setColor(Float32Array.of(cr, cg, cb, 1));
+      canvas.drawCircle(x, y, core * 0.66, paints.fill);
+      paints.fill.setColor(Float32Array.of(Math.min(1, cr + 0.42), Math.min(1, cg + 0.42), Math.min(1, cb + 0.42), 0.9));
+      canvas.drawCircle(x, y, core * 0.34, paints.fill);
+      return;
+    }
+    point(x, y, mag, table.bv[i]);
+  };
+  result.scanned = eachStar(f.chart.query, limit, visit);
+  // Tiles from the deep pack: all fainter than the bundled stars, and sorted within a tile.
+  for (const t of f.chart.query?.tiles ?? []) {
+    const p = t.xyz;
+    for (let i = 0; i < t.count; i++) {
+      const mag = t.mag[i];
+      if (mag > limit) break;
+      result.scanned++;
+      const a = i * 3;
+      const cz = m6 * p[a] + m7 * p[a + 1] + m8 * p[a + 2];
+      const k = stereo ? 1 - cz : -cz;
+      if (k <= 1e-4) continue;
+      const s = scale / k;
+      const x = w / 2 + (m0 * p[a] + m1 * p[a + 1] + m2 * p[a + 2]) * s;
+      const y = h / 2 - (m3 * p[a] + m4 * p[a + 1] + m5 * p[a + 2]) * s;
+      if (x < -margin || y < -margin || x > w + margin || y > h + margin) continue;
+      drawn++;
+      point(x, y, mag, t.bv[i]);
+    }
   }
+  result.drawn = drawn;
   buckets.forEach((b) => canvas.drawPoints(PointMode.Points, b.pts, b.paint));
+}
+
+const GRID_TINT: Record<GridKind, [number, number, number]> = {
+  equatorial: [0.56, 0.68, 0.96], horizontal: [0.96, 0.72, 0.58], ecliptic: [0.98, 0.86, 0.56], galactic: [0.88, 0.62, 0.84],
+};
+
+/** Draws one grid and offers a label for each line that crosses the view. */
+function drawGrid(canvas: SkCanvas, f: SkyFrame, kind: GridKind, labels: LabelCandidate[]) {
+  const { camera, moment } = f;
+  const w = camera.width, h = camera.height;
+  const horizontal = kind === 'horizontal';
+  const toHorizon: Mat3 = horizontal ? [1, 0, 0, 0, 1, 0, 0, 0, 1] : mulMatFast(moment.matrix, gridToJ2000(kind));
+  const center = mul(transpose(toHorizon), unproject(camera, w / 2, h / 2));
+  const lon = horizontal ? vectorHorizontal(center).azimuth : Math.atan2(center[1], center[0]) / DEG;
+  const lat = Math.asin(Math.min(1, Math.max(-1, center[2]))) / DEG;
+  const half = viewHalfAngle(camera);
+  const minor = Skia.PathBuilder.Make(), major = Skia.PathBuilder.Make();
+  const bottom = h - f.bottomInset - 26, top = f.topInset + 4;
+  for (const line of gridLines(lon, lat, half, gridStep(camera.fov))) {
+    const path = line.major ? major : minor;
+    let prev: { x: number; y: number } | null = null;
+    let anchor: { x: number; y: number } | null = null;
+    for (let i = 0; i < line.points.length; i += 2) {
+      const dir = horizontal ? azAlt(line.points[i], line.points[i + 1]) : lonLat(line.points[i], line.points[i + 1]);
+      const p = project(camera, mul(toHorizon, dir));
+      if (!p) { prev = null; continue; }
+      if (prev && Math.hypot(p.x - prev.x, p.y - prev.y) < Math.max(w, h) * 0.7) { path.moveTo(prev.x, prev.y); path.lineTo(p.x, p.y); }
+      prev = p;
+      // Meridians are named near the bottom of the view, parallels near its left edge.
+      if (p.x > 8 && p.x < w - 40 && p.y > top && p.y < bottom) {
+        if (!anchor || (line.axis === 'lon' ? p.y > anchor.y : p.x < anchor.x)) anchor = p;
+      }
+    }
+    if (anchor) labels.push({ text: gridLabel(kind, line), style: 'grid', priority: PRIORITY.grid, boxes: [{ x: anchor.x + 3, y: anchor.y - 12, w: 34, h: 12 }] });
+  }
+  const [cr, cg, cb] = GRID_TINT[kind];
+  paints.grid.setColor(Float32Array.of(cr, cg, cb, 0.26));
+  canvas.drawPath(minor.build(), paints.grid);
+  paints.grid.setColor(Float32Array.of(cr, cg, cb, 0.6));
+  canvas.drawPath(major.build(), paints.grid);
+}
+
+function drawHorizonLine(canvas: SkCanvas, f: SkyFrame) {
+  const path = Skia.PathBuilder.Make();
+  let prev: { x: number; y: number } | null = null;
+  for (let az = 0; az <= 360; az += 2) {
+    const p = project(f.camera, azAlt(az, 0));
+    if (p && prev && Math.hypot(p.x - prev.x, p.y - prev.y) < Math.max(f.camera.width, f.camera.height) * 0.7) { path.moveTo(prev.x, prev.y); path.lineTo(p.x, p.y); }
+    prev = p;
+  }
+  paints.grid.setColor(Float32Array.of(0.96, 0.7, 0.58, 0.62));
+  canvas.drawPath(path.build(), paints.grid);
+}
+
+function drawBoundaries(canvas: SkCanvas, f: SkyFrame) {
+  const { camera, moment } = f;
+  const forward = mul(transpose(moment.matrix), unproject(camera, camera.width / 2, camera.height / 2));
+  const half = viewHalfAngle(camera);
+  const path = Skia.PathBuilder.Make();
+  const limit = Math.max(camera.width, camera.height) * 0.7;
+  for (const poly of boundaryPolygons()) {
+    if (angleBetween(forward, poly.center) > half + poly.radius) continue;
+    let prev: { x: number; y: number } | null = null;
+    for (let i = 0; i < poly.xyz.length; i += 3) {
+      const p = project(camera, mul(moment.matrix, [poly.xyz[i], poly.xyz[i + 1], poly.xyz[i + 2]]));
+      if (p && prev && Math.hypot(p.x - prev.x, p.y - prev.y) < limit) { path.moveTo(prev.x, prev.y); path.lineTo(p.x, p.y); }
+      prev = p;
+    }
+  }
+  paints.dashed.setColor(Float32Array.of(0.62, 0.72, 0.92, 0.34));
+  canvas.drawPath(path.build(), paints.dashed);
 }
 
 let orionBody: Set<number> | null = null;
 
-function drawConstellations(canvas: SkCanvas, f: SkyFrame, cam: Mat3, artOn: boolean): { name: string; x: number; y: number; focus: number; span: number }[] {
+type ConstellationName = { id: string; name: string; x: number; y: number; focus: number; span: number };
+
+function drawConstellations(canvas: SkCanvas, f: SkyFrame, cam: Mat3, artOn: boolean): ConstellationName[] {
   const { camera, field } = f;
   const table = stars();
   const scale = cameraScale(camera);
@@ -207,7 +343,7 @@ function drawConstellations(canvas: SkCanvas, f: SkyFrame, cam: Mat3, artOn: boo
     return [w / 2 + v[0] * s, h / 2 - v[1] * s];
   };
   orionBody ??= new Set([...ORION_BODY_HIP].map((hip) => table.indexByHip.get(hip)!));
-  const names: { name: string; x: number; y: number; focus: number; span: number }[] = [];
+  const names: ConstellationName[] = [];
   const pathNormal = Skia.PathBuilder.Make();
   const pathFocus = Skia.PathBuilder.Make();
   for (const c of constellationGeometry()) {
@@ -230,7 +366,7 @@ function drawConstellations(canvas: SkCanvas, f: SkyFrame, cam: Mat3, artOn: boo
     const path = focus ? pathFocus : pathNormal;
     for (const s of segs) { path.moveTo(s[0], s[1]); path.lineTo(s[2], s[3]); }
     const span = Math.max(...segs.map((s) => Math.max(s[0], s[2]))) - Math.min(...segs.map((s) => Math.min(s[0], s[2])));
-    if (inside) names.push({ name: c.name, x: cx, y: cy, focus: focus ? 1 : 0, span });
+    if (inside) names.push({ id: c.id, name: c.name, x: cx, y: cy, focus: focus ? 1 : 0, span });
   }
   canvas.drawPath(pathNormal.build(), paints.line);
   canvas.drawPath(pathFocus.build(), paints.lineFocus);
@@ -271,15 +407,10 @@ function drawBody(canvas: SkCanvas, b: BodyState, x: number, y: number, r: SkyRe
   }
 }
 
-interface Box { x: number; y: number; w: number; h: number }
-const collides = (a: Box, list: Box[]) => list.some((b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y);
-
-function place(placed: Box[], box: Box, bounds: { w: number; top: number; bottom: number }) {
-  if (box.x < 6 || box.x + box.w > bounds.w - 6 || box.y < bounds.top || box.y + box.h > bounds.bottom) return false;
-  if (collides(box, placed)) return false;
-  placed.push(box);
-  return true;
-}
+const STYLE_TINT: Record<LabelStyle, [number, number, number, number]> = {
+  selection: [1, 0.86, 0.74, 1], body: [1, 0.9, 0.8, 0.95], constellation: [0.88, 0.91, 1, 0.84], chartConstellation: [0.72, 0.8, 1, 0.68], star: [1, 1, 1, 0.96],
+  chartStar: [0.9, 0.92, 1, 0.8], deep: [0.96, 0.8, 0.68, 0.85], grid: [0.72, 0.78, 0.9, 0.6],
+};
 
 function drawText(canvas: SkCanvas, text: string, x: number, y: number, font: SkFont, r: number, g: number, b: number, a: number) {
   // A soft dark halo keeps labels legible over the Milky Way without a visible plate.
@@ -292,37 +423,68 @@ function drawText(canvas: SkCanvas, text: string, x: number, y: number, font: Sk
 
 const spaced = (s: string) => s.toUpperCase().split('').join('  ');
 
-function drawLabels(canvas: SkCanvas, f: SkyFrame, r: SkyResources, projected: Float32Array, names: { name: string; x: number; y: number; focus: number; span: number }[], brightness: number) {
-  const { camera, moment } = f;
+/** Three places around a point, for labels free to move out of each other's way. */
+function around(x: number, y: number, w: number, h: number, gap: number): LabelBox[] {
+  return [{ x: x + gap, y: y - h / 2, w, h }, { x: x - gap - w, y: y - h / 2, w, h }, { x: x - w / 2, y: y - gap - h, w, h }, { x: x - w / 2, y: y + gap, w, h }];
+}
+
+function collectLabels(f: SkyFrame, r: SkyResources, names: ConstellationName[], brightness: number, out: LabelCandidate[], cam: Mat3) {
+  const { camera, moment, field } = f;
+  const chart = f.chart.mode === 'atlas';
   const aboveGround = (x: number, y: number) => !f.layers.ground || unproject(camera, x, y)[2] > 0.03;
-  const bounds = { w: camera.width, top: f.topInset, bottom: camera.height - f.bottomInset };
-  const placed: Box[] = [];
+  const inView = (x: number, y: number) => x >= 0 && y >= 0 && x <= camera.width && y <= camera.height;
+
+  if (f.selection && f.selectionName && f.selectionDir) {
+    const p = project(camera, f.selectionDir);
+    if (p && inView(p.x, p.y)) out.push({ text: f.selectionName, style: 'selection', priority: PRIORITY.selection, id: f.selection, boxes: around(p.x, p.y, r.labelFont.getTextWidth(f.selectionName), 16, 28) });
+  }
+  if (!f.layers.labels) return;
   // Solar system first, then the constellation, then named stars by brightness.
   for (const b of moment.bodies) {
-    if (b.id === 'sun' || !f.layers.planets) continue;
+    if (b.id === 'sun' || !f.layers.planets || `body:${b.id}` === f.selection) continue;
     const p = project(camera, b.dir);
     if (!p || (f.layers.ground && b.dir[2] < 0.02)) continue;
     const w = r.labelFont.getTextWidth(b.name);
-    const box = { x: p.x + 10, y: p.y - 7, w, h: 16 };
-    if (place(placed, box, bounds)) drawText(canvas, b.name, box.x, p.y + 5, r.labelFont, 1, 0.9, 0.8, 0.95);
+    out.push({ text: b.name, style: 'body', priority: PRIORITY.body, id: `body:${b.id}`, boxes: [{ x: p.x + 10, y: p.y - 7, w, h: 16 }] });
   }
   if (f.layers.constellations) {
     const fade = 1 - brightness;
-    for (const n of names.filter((x) => x.focus > 0).slice(0, 2)) {
-      const label = spaced(n.name);
-      const w = r.trackedFont.getTextWidth(label);
-      // Tucked against the left of the figure, so the name doesn't cross its lines.
-      const left = Math.max(14, n.x - w - n.span * 0.2);
-      const top = n.y + n.span * 0.22;
-      const box = { x: left, y: top, w, h: 14 };
-      if (aboveGround(n.x, top) && place(placed, box, bounds)) drawText(canvas, label, box.x, top + 11, r.trackedFont, 0.88, 0.91, 1, 0.84 * fade);
+    if (fade > 0.02) {
+      for (const n of chart ? names : names.filter((x) => x.focus > 0).slice(0, 2)) {
+        const id = `con:${n.id}`;
+        if (chart) {
+          const text = n.name.toUpperCase();
+          const w = r.smallFont.getTextWidth(text);
+          if (aboveGround(n.x, n.y)) out.push({ text, style: 'chartConstellation', priority: PRIORITY.constellation, id, boxes: [{ x: n.x - w / 2, y: n.y - 7, w, h: 14 }] });
+          continue;
+        }
+        const text = spaced(n.name);
+        const w = r.trackedFont.getTextWidth(text);
+        // Tucked against the left of the figure, so the name doesn't cross its lines.
+        const left = Math.max(14, n.x - w - n.span * 0.2);
+        const top = n.y + n.span * 0.22;
+        if (aboveGround(n.x, top)) out.push({ text, style: 'constellation', priority: PRIORITY.constellation, id, boxes: [{ x: left, y: top, w, h: 14 }] });
+      }
     }
   }
-  const limit = camera.fov > 16 ? 1.0 : camera.fov > 9 ? 2.6 : 4.2;
-  for (const s of namedStarList()) {
-    if (s.mag > limit) break;
-    const x = projected[s.index * 2], y = projected[s.index * 2 + 1];
-    if (Number.isNaN(x) || x < 0 || y < 0 || x > camera.width || y > camera.height || !aboveGround(x, y)) continue;
+  if (!f.layers.stars) return;
+  const cutoff = labelLimit(f.chart.mode, f.chart.settings.labelDensity, camera.fov);
+  const scale = cameraScale(camera);
+  const stereo = camera.projection === 'stereographic';
+  const xyz = field.xyz;
+  let rank = 0;
+  for (const s of chart ? chartStarList() : namedStarList()) {
+    if (s.mag > cutoff) break;
+    if (s.mag > f.chart.limit || `star:${s.hip}` === f.selection) continue;
+    const a = s.index * 3;
+    const px = xyz[a], py = xyz[a + 1], pz = xyz[a + 2];
+    const cz = cam[6] * px + cam[7] * py + cam[8] * pz;
+    const k = stereo ? 1 - cz : -cz;
+    if (k <= 1e-4) continue;
+    const q = scale / k;
+    const x = camera.width / 2 + (cam[0] * px + cam[1] * py + cam[2] * pz) * q;
+    const y = camera.height / 2 - (cam[3] * px + cam[4] * py + cam[5] * pz) * q;
+    if (!inView(x, y) || !aboveGround(x, y)) continue;
     const w = r.labelFont.getTextWidth(s.name);
     const left = x < camera.width / 2;
     // A name that would run off the screen goes to the star's other side.
@@ -330,31 +492,98 @@ function drawLabels(canvas: SkCanvas, f: SkyFrame, r: SkyResources, projected: F
     const bx = left !== flip ? x - w - 11 : x + 11;
     // The brightest names ride a little above their star, as the design sets them.
     const by = s.mag < 0.6 && left ? y - 22 : y - 8;
-    const box = { x: bx, y: by, w, h: 16 };
-    if (place(placed, box, bounds)) drawText(canvas, s.name, box.x, by + 12.5, r.labelFont, 1, 1, 1, 0.96 * (1 - brightness * 0.8));
+    const first = { x: bx, y: by, w, h: 16 };
+    out.push({ text: s.name, style: chart && !s.name.match(/^[A-Z]/) ? 'chartStar' : 'star', priority: PRIORITY.star - rank++ * 0.01, id: `star:${s.hip}`, boxes: chart ? [first, ...around(x, y, w, 16, 11)] : [first] });
   }
 }
 
-function drawDeepSky(canvas: SkCanvas, f: SkyFrame, r: SkyResources, brightness: number) {
+function drawPlacedLabels(canvas: SkCanvas, placed: PlacedLabel[], r: SkyResources, brightness: number) {
+  for (const { candidate: c, box } of placed) {
+    const [cr, cg, cb, ca] = STYLE_TINT[c.style];
+    if (c.style === 'constellation') { drawText(canvas, c.text, box.x, box.y + 11, r.trackedFont, cr, cg, cb, ca * (1 - brightness)); continue; }
+    if (c.style === 'chartConstellation' || c.style === 'grid' || c.style === 'deep') { drawText(canvas, c.text, box.x, box.y + 10.5, r.smallFont, cr, cg, cb, ca); continue; }
+    const fade = c.style === 'star' || c.style === 'chartStar' ? 1 - brightness * 0.8 : 1;
+    drawText(canvas, c.text, box.x, box.y + (c.style === 'body' ? 12 : 12.5), r.labelFont, cr, cg, cb, ca * fade);
+  }
+}
+
+/** A catalog symbol for each kind of object. Nothing here pretends to be a photograph. */
+function drawSymbol(canvas: SkCanvas, type: ObjectType, x: number, y: number) {
+  const stroke = paints.stroke;
+  stroke.setStrokeWidth(0.8);
+  stroke.setColor(Float32Array.of(0.96, 0.75, 0.62, 0.72));
+  paints.dashed.setColor(Float32Array.of(0.96, 0.75, 0.62, 0.72));
+  if (type === 'galaxy') canvas.drawOval(Skia.XYWHRect(x - 6, y - 3, 12, 6), stroke);
+  else if (type === 'openCluster' || type === 'starCloud' || type === 'asterism') canvas.drawCircle(x, y, 5, paints.dashed);
+  else if (type === 'globularCluster') { canvas.drawCircle(x, y, 4.5, stroke); canvas.drawLine(x - 4.5, y, x + 4.5, y, stroke); canvas.drawLine(x, y - 4.5, x, y + 4.5, stroke); }
+  else if (type === 'planetaryNebula') {
+    canvas.drawCircle(x, y, 3, stroke);
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) canvas.drawLine(x + dx * 3, y + dy * 3, x + dx * 6, y + dy * 6, stroke);
+  } else if (type === 'clusterNebula') { canvas.drawRect(Skia.XYWHRect(x - 4, y - 4, 8, 8), stroke); canvas.drawCircle(x, y, 6.5, paints.dashed); }
+  else if (type === 'nebula' || type === 'supernovaRemnant') canvas.drawRect(Skia.XYWHRect(x - 4, y - 4, 8, 8), stroke);
+  else canvas.drawCircle(x, y, 3.5, stroke);
+}
+
+function drawDeepSky(canvas: SkCanvas, f: SkyFrame, r: SkyResources, brightness: number, labels: LabelCandidate[]) {
   const { camera, moment } = f;
-  if (camera.fov > 22 || brightness > 0.4 || f.overlayOnly) return;
+  const chart = f.chart.mode === 'atlas';
   paints.stroke.setStrokeWidth(0.7);
   paints.stroke.setColor(Float32Array.of(0.96, 0.75, 0.62, 0.55));
-  for (const d of deepSkyMarkers()) {
-    if ((d.object.magnitude ?? 9) > (camera.fov > 14 ? 6 : 9)) continue;
+  const ppd = pointsPerDegree(camera);
+  const named = chart || camera.fov < 16;
+  for (const d of visibleDeepSky(f.chart.mode, f.layers, camera.fov, brightness, f.overlayOnly)) {
     const p = project(camera, mul(moment.matrix, d.vec));
     if (!p || p.x < 0 || p.y < 0 || p.x > camera.width || p.y > camera.height) continue;
-    canvas.drawCircle(p.x, p.y, 3.5, paints.stroke);
-    if (camera.fov < 16) drawText(canvas, d.object.name, p.x + 7, p.y + 3.5, r.smallFont, 0.96, 0.8, 0.68, 0.85);
+    if (chart) {
+      drawSymbol(canvas, d.object.type, p.x, p.y);
+      // The catalog's true size, once it is large enough to be more than the symbol. It has
+      // no position angle, so this stays a circle rather than a guessed ellipse.
+      const major = d.object.deepSky?.majorAxis ?? 0;
+      const radius = ((major / 60) * ppd) / 2;
+      if (radius > 9) { paints.stroke.setStrokeWidth(0.6); paints.stroke.setColor(Float32Array.of(0.96, 0.75, 0.62, 0.3)); canvas.drawCircle(p.x, p.y, radius, paints.stroke); }
+    } else {
+      paints.stroke.setStrokeWidth(0.7);
+      paints.stroke.setColor(Float32Array.of(0.96, 0.75, 0.62, 0.55));
+      canvas.drawCircle(p.x, p.y, 3.5, paints.stroke);
+    }
+    if (!named || !f.layers.labels || d.object.id === f.selection) continue;
+    const text = d.object.deepSky?.messier ? `M${d.object.deepSky.messier}` : d.object.name;
+    const label = chart ? text : d.object.name;
+    const w = r.smallFont.getTextWidth(label);
+    labels.push({ text: label, style: 'deep', priority: PRIORITY.deep - (d.object.magnitude ?? 12), id: d.object.id, boxes: chart ? around(p.x, p.y, w, 13, 9) : [{ x: p.x + 7, y: p.y - 8, w, h: 13 }] });
   }
 }
 
 export const SELECTION_SETTLE = 0.34;
 
+/** Points from the middle of the view toward a target that has left the screen. */
+function drawGuide(canvas: SkCanvas, f: SkyFrame, r: SkyResources, dir: Vec3) {
+  const { camera } = f;
+  const inCamera = mul(camera.orientation, dir);
+  const angle = Math.atan2(inCamera[1], inCamera[0]);
+  const cx = camera.width / 2, top = f.topInset + 12, bottom = camera.height - f.bottomInset - 12;
+  const cy = (top + bottom) / 2;
+  const dx = Math.cos(angle), dy = -Math.sin(angle);
+  const reach = Math.min(dx ? (cx - 26) / Math.abs(dx) : Infinity, dy ? (bottom - top) / 2 / Math.abs(dy) - 6 : Infinity);
+  const x = cx + dx * reach, y = cy + dy * reach;
+  const arrow = Skia.PathBuilder.Make();
+  const tip = 11, wing = 7;
+  arrow.moveTo(x + dx * tip, y + dy * tip);
+  arrow.lineTo(x - dy * wing, y + dx * wing);
+  arrow.lineTo(x + dy * wing, y - dx * wing);
+  arrow.close();
+  paints.fill.setColor(Float32Array.of(0.98, 0.68, 0.44, 0.95));
+  canvas.drawPath(arrow.build(), paints.fill);
+  const away = `${Math.round(angleBetween(dir, unproject(camera, cx, camera.height / 2)))}°`;
+  const w = r.smallFont.getTextWidth(away);
+  drawText(canvas, away, Math.min(camera.width - w - 8, Math.max(8, x - dx * 24 - w / 2)), y - dy * 24 + 4, r.smallFont, 1, 0.86, 0.74, 1);
+}
+
 function drawSelection(canvas: SkCanvas, f: SkyFrame, r: SkyResources) {
   if (!f.selectionDir) return;
   const p = project(f.camera, f.selectionDir);
-  if (!p) return;
+  const onScreen = p && p.x >= 0 && p.x <= f.camera.width && p.y >= f.topInset && p.y <= f.camera.height - f.bottomInset;
+  if (!onScreen) { if (f.showCompass) drawGuide(canvas, f, r, f.selectionDir); return; }
   // A ring settles onto the target, then four copper ticks hold it. The star stays clear.
   const t = Math.min(1, f.selectionAge / SELECTION_SETTLE);
   const e = 1 - (1 - t) * (1 - t) * (1 - t);
@@ -446,27 +675,57 @@ function drawCompass(canvas: SkCanvas, f: SkyFrame, r: SkyResources) {
   canvas.drawText(heading, cx - hw / 2, baseY + 31, paints.text, r.headingFont);
 }
 
+/** Field of view, star limit and an angular scale, for the technical chart. */
+function drawReadout(canvas: SkCanvas, f: SkyFrame, r: SkyResources) {
+  const { camera } = f;
+  const y = camera.height - f.bottomInset - 12;
+  const fov = camera.fov < 10 ? camera.fov.toFixed(1) : String(Math.round(camera.fov));
+  drawText(canvas, `FOV ${fov}°   V ≤ ${f.chart.limit.toFixed(1)}   J2000`, 18, y, r.smallFont, 0.82, 0.86, 0.96, 0.82);
+  const ppd = pointsPerDegree(camera);
+  const degrees = [30, 20, 10, 5, 2, 1, 0.5, 0.25].find((d) => d * ppd <= 84 && d * ppd >= 28) ?? 1 / 6;
+  const length = degrees * ppd;
+  const right = camera.width - 18;
+  paints.stroke.setStrokeWidth(0.9);
+  paints.stroke.setColor(Float32Array.of(0.82, 0.86, 0.96, 0.82));
+  canvas.drawLine(right - length, y - 3, right, y - 3, paints.stroke);
+  canvas.drawLine(right - length, y - 6, right - length, y, paints.stroke);
+  canvas.drawLine(right, y - 6, right, y, paints.stroke);
+  const text = degrees >= 1 ? `${degrees}°` : `${Math.round(degrees * 60)}′`;
+  drawText(canvas, text, right - length / 2 - r.smallFont.getTextWidth(text) / 2, y - 9, r.smallFont, 0.82, 0.86, 0.96, 0.82);
+}
+
+/** 0 full night, 1 full daylight, as this frame shows it. */
+export const frameBrightness = (sunAltitude: number, layers: Layers, nightPreview: boolean, overlayOnly: boolean) =>
+  nightPreview || (!layers.atmosphere && !overlayOnly) ? 0 : skyBrightness(sunAltitude);
+
 export function renderFrame(f: SkyFrame, r: SkyResources): SkPicture {
   const { camera, moment } = f;
   paints ??= makePaints();
   return createPicture((canvas) => {
-    const brightness = f.nightPreview ? 0 : skyBrightness(moment.sunAltitude);
-    const table = stars();
+    const brightness = frameBrightness(moment.sunAltitude, f.layers, f.nightPreview, f.overlayOnly);
     const cam = mulMatFast(camera.orientation, moment.matrix);
-    const projected = new Float32Array(table.count * 2).fill(NaN);
+    const candidates: LabelCandidate[] = [];
 
     canvas.save();
     canvas.clipRect(Skia.XYWHRect(0, 0, camera.width, camera.height), ClipOp.Intersect, false);
     drawSkyPass(canvas, f, r, brightness, 'sky');
     const artStrength = f.layers.artwork && r.artwork && f.layers.constellations && !f.overlayOnly && brightness < 0.5 ? artworkFade(camera.fov) : 0;
     if (artStrength > 0) drawArtwork(canvas, r.artwork!, camera, cam, f.field, artStrength);
-    let names: { name: string; x: number; y: number; focus: number; span: number }[] = [];
+    let names: ConstellationName[] = [];
     // The figures stay available by day, but recede: the stars they join are not visible.
     paints.lineFocus.setAlphaf(0.88 * (1 - 0.72 * brightness));
     paints.line.setAlphaf(0.17 * (1 - 0.5 * brightness));
+    if (!f.overlayOnly) {
+      if (f.layers.gridEquatorial) drawGrid(canvas, f, 'equatorial', candidates);
+      if (f.layers.gridHorizontal) drawGrid(canvas, f, 'horizontal', candidates);
+      if (f.layers.gridEcliptic) drawGrid(canvas, f, 'ecliptic', candidates);
+      if (f.layers.gridGalactic) drawGrid(canvas, f, 'galactic', candidates);
+      if (f.layers.boundaries) drawBoundaries(canvas, f);
+      if (!f.layers.ground && f.showCompass) drawHorizonLine(canvas, f);
+    }
     if (f.layers.constellations) names = drawConstellations(canvas, f, cam, artStrength > 0);
-    drawStars(canvas, f, r, brightness, projected, cam);
-    if (f.layers.deepSky) drawDeepSky(canvas, f, r, brightness);
+    if (f.layers.stars) drawStars(canvas, f, r, brightness, cam);
+    if (f.layers.deepSky) drawDeepSky(canvas, f, r, brightness, candidates);
     if (f.layers.planets) {
       for (const b of moment.bodies) {
         const p = project(camera, b.dir);
@@ -477,9 +736,13 @@ export function renderFrame(f: SkyFrame, r: SkyResources): SkPicture {
       }
     }
     if (f.layers.ground) drawSkyPass(canvas, f, r, brightness, 'ground');
-    if (f.layers.labels) drawLabels(canvas, f, r, projected, names, brightness);
+    collectLabels(f, r, names, brightness, candidates, cam);
+    const bounds = { w: camera.width, top: f.topInset, bottom: camera.height - f.bottomInset - (f.chart.readout ? 30 : 0) };
+    f.result.labels = placeLabels(candidates, bounds, labelBudget(f.chart.settings.labelDensity));
+    drawPlacedLabels(canvas, f.result.labels, r, brightness);
     drawSelection(canvas, f, r);
     if (f.showCompass) drawCompass(canvas, f, r);
+    if (f.chart.readout) drawReadout(canvas, f, r);
     if (f.nightVision) {
       const red = Skia.Paint();
       red.setBlendMode(BlendMode.Multiply);

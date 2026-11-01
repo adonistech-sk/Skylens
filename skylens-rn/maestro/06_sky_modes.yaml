@@ -1,0 +1,77 @@
+# The three sky modes, the Layers panel and the deep star pack on iOS. The diagnostics
+# screenshot records real Hermes frame times from a Release build on the Simulator, which
+# is closer than Node but is still not a phone.
+appId: sk.skylens.app
+---
+- launchApp
+# Screenshot builds open on the sky, and a link sent this early would lose to start-up.
+- extendedWaitUntil:
+    visible:
+      id: sky-search
+    timeout: 90000
+- runFlow:
+    file: lib/settle.yaml
+    env:
+      WAIT: 6000
+- takeScreenshot: flow_mode_explore
+- tapOn:
+    id: segment-observe
+- runFlow:
+    file: lib/settle.yaml
+    env:
+      WAIT: 2000
+- takeScreenshot: flow_mode_observe
+- tapOn:
+    id: segment-atlas
+- runFlow:
+    file: lib/settle.yaml
+    env:
+      WAIT: 6000
+- takeScreenshot: flow_mode_atlas
+# Some real frames to time, from real drags.
+- swipe:
+    start: "70%,45%"
+    end: "30%,45%"
+    duration: 900
+- swipe:
+    start: "30%,45%"
+    end: "70%,45%"
+    duration: 900
+- swipe:
+    start: "50%,35%"
+    end: "50%,60%"
+    duration: 900
+- runFlow:
+    file: lib/settle.yaml
+    env:
+      WAIT: 3000
+- tapOn:
+    id: sky-layers
+- extendedWaitUntil:
+    visible:
+      id: sky-layers-panel
+    timeout: 8000
+- takeScreenshot: flow_layers_panel
+- scrollUntilVisible:
+    element:
+      id: sky-diagnostics
+    direction: DOWN
+    timeout: 20000
+- runFlow:
+    file: lib/settle.yaml
+    env:
+      WAIT: 2500
+- assertVisible:
+    id: sky-diagnostics
+- assertVisible: ".*Deep pack ready.*"
+- takeScreenshot: flow_diagnostics_atlas
+- tapOn:
+    id: sky-layers
+- tapOn:
+    id: segment-explore
+- runFlow:
+    file: lib/settle.yaml
+    env:
+      WAIT: 3000
+- assertVisible:
+    id: sky-search

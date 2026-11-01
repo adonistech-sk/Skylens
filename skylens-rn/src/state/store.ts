@@ -5,23 +5,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 import { Observer } from '../astronomy/core';
 import { DEMO_DATE, DEMO_LOCATION, DEMO_MODE } from './demo';
+import { DEFAULT_FLAGS, Flags } from './flags';
+import { DEFAULT_LAYERS, Layers, migrateSkySettings, MODE_DEFAULTS, ModeSettings, SkyMode, SkySettings } from './skyModes';
+
+export { DEFAULT_LAYERS };
+export type { Layers, SkyMode, SkySettings };
 
 export interface SavedLocation extends Observer {
   name: string;
   timeZone: string;
   source: 'gps' | 'manual';
-}
-
-export interface Layers {
-  constellations: boolean;
-  labels: boolean;
-  deepSky: boolean;
-  planets: boolean;
-  milkyWay: boolean;
-  artwork: boolean;
-  ground: boolean;
-  /** The artistic landscape along the bottom of the sky view. Not the true horizon. */
-  framing: boolean;
 }
 
 export interface Persisted {
@@ -33,6 +26,9 @@ export interface Persisted {
   nightVision: boolean;
   /** Set only from a verified StoreKit entitlement, never from a button press. */
   proActive: boolean;
+  skyMode: SkyMode;
+  modes: ModeSettings;
+  flags: Flags;
 }
 
 interface Clock {
@@ -52,10 +48,11 @@ interface State extends Persisted {
   focus: FocusRequest | null;
   /** Shows the stars in daylight, labelled on screen. It never changes the clock. */
   nightPreview: boolean;
+  /** Bumped when deep stars become resolvable, so lists that hold them redraw. */
+  catalogRevision: number;
 }
 
 const KEY = 'skylens.user.v1';
-export const DEFAULT_LAYERS: Layers = { constellations: true, labels: true, deepSky: true, planets: true, milkyWay: true, artwork: true, ground: true, framing: true };
 
 const initial: State = {
   hydrated: false,
@@ -66,10 +63,14 @@ const initial: State = {
   use24h: true,
   nightVision: false,
   proActive: false,
+  skyMode: 'explore',
+  modes: MODE_DEFAULTS,
+  flags: DEFAULT_FLAGS,
   clock: { anchorSky: null, anchorReal: 0, rate: 1 },
   selection: null,
   focus: null,
   nightPreview: false,
+  catalogRevision: 0,
 };
 
 let state = initial;
@@ -77,9 +78,9 @@ const listeners = new Set<() => void>();
 
 function persist() {
   if (DEMO_MODE) return; // Screenshot runs never touch saved user data.
-  const { onboarded, location, favorites, layers, use24h, nightVision } = state;
+  const { onboarded, location, favorites, use24h, nightVision, skyMode, modes, flags } = state;
   // proActive is deliberately not restored from here: entitlements are re-read from StoreKit.
-  AsyncStorage.setItem(KEY, JSON.stringify({ onboarded, location, favorites, layers, use24h, nightVision })).catch(() => {});
+  AsyncStorage.setItem(KEY, JSON.stringify({ onboarded, location, favorites, use24h, nightVision, skyMode, modes, flags })).catch(() => {});
 }
 
 function set(patch: Partial<State>, save = false) {
@@ -107,7 +108,8 @@ export async function hydrate() {
     const raw = await AsyncStorage.getItem(KEY);
     // Missing keys fall back to defaults, so new options never reset settings.
     const saved = raw ? (JSON.parse(raw) as Partial<Persisted>) : {};
-    set({ ...saved, layers: { ...DEFAULT_LAYERS, ...saved.layers }, hydrated: true });
+    const { modes, skyMode } = migrateSkySettings(saved);
+    set({ ...saved, skyMode, modes, layers: modes[skyMode].layers, flags: { ...DEFAULT_FLAGS, ...saved.flags }, hydrated: true });
   } catch {
     // A corrupt file must not stop the app. Starting fresh is the safe recovery.
     set({ hydrated: true });
@@ -116,7 +118,23 @@ export async function hydrate() {
 
 export const completeOnboarding = () => set({ onboarded: true }, true);
 export const setLocation = (location: SavedLocation) => set({ location }, true);
-export const setLayer = (key: keyof Layers, value: boolean) => set({ layers: { ...state.layers, [key]: value } }, true);
+
+const patchMode = (patch: Partial<SkySettings>) => {
+  const settings = { ...state.modes[state.skyMode], ...patch };
+  set({ modes: { ...state.modes, [state.skyMode]: settings }, layers: settings.layers }, true);
+};
+export const setLayer = (key: keyof Layers, value: boolean) => patchMode({ layers: { ...state.layers, [key]: value } });
+export const setSkyMode = (skyMode: SkyMode) => set({ skyMode, layers: state.modes[skyMode].layers }, true);
+export const setDensity = (density: number) => patchMode({ density });
+export const setMagnitudeCap = (magnitudeCap: number) => patchMode({ magnitudeCap });
+export const setLabelDensity = (labelDensity: number) => patchMode({ labelDensity });
+export const resetSkyMode = () => patchMode({ ...MODE_DEFAULTS[state.skyMode] });
+export const setFlag = (key: keyof Flags, value: boolean) => {
+  // Turning the modes off returns to today's sky rather than stranding a chart on screen.
+  const skyMode = key === 'skyModes' && !value ? 'explore' : state.skyMode;
+  set({ flags: { ...state.flags, [key]: value }, skyMode, layers: state.modes[skyMode].layers }, true);
+};
+export const bumpCatalog = () => set({ catalogRevision: state.catalogRevision + 1 });
 export const setUse24h = (use24h: boolean) => set({ use24h }, true);
 export const setNightVision = (nightVision: boolean) => set({ nightVision }, true);
 export const setNightPreview = (nightPreview: boolean) => set({ nightPreview });

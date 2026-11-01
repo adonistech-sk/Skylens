@@ -50,7 +50,7 @@ export function IconButton({ name, label, onPress, size = 44, iconSize = 21, tin
   );
 }
 
-export function SegmentedControl<T extends string>({ options, value, onChange, style, solid }: { options: { value: T; label: string }[]; value: T; onChange: (v: T) => void; style?: StyleProp<ViewStyle>; solid?: boolean }) {
+export function SegmentedControl<T extends string>({ options, value, onChange, style, solid, compact }: { options: { value: T; label: string }[]; value: T; onChange: (v: T) => void; style?: StyleProp<ViewStyle>; solid?: boolean; compact?: boolean }) {
   const [width, setWidth] = useState(0);
   const reduced = useReducedMotion();
   const index = Math.max(0, options.findIndex((o) => o.value === value));
@@ -63,7 +63,7 @@ export function SegmentedControl<T extends string>({ options, value, onChange, s
   }, [index, segment, reduced, width, x]);
   const pill = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));
   return (
-    <View style={[styles.segments, style]} accessibilityRole="tablist" onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+    <View style={[styles.segments, compact && styles.segmentsCompact, style]} accessibilityRole="tablist" onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
       {width ? (
         <Animated.View pointerEvents="none" style={[styles.segmentPill, { width: segment }, !solid && styles.segmentOn, pill]}>
           {solid ? <LinearGradient colors={peachGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: 19 }]} /> : null}
@@ -72,8 +72,8 @@ export function SegmentedControl<T extends string>({ options, value, onChange, s
       {options.map((o) => {
         const selected = o.value === value;
         return (
-          <Pressable key={o.value} accessibilityRole="tab" accessibilityLabel={o.label} accessibilityState={{ selected }} onPress={() => onChange(o.value)} style={styles.segment}>
-            <Text style={[styles.segmentLabel, selected && styles.segmentLabelOn, selected && solid && { color: color.peachInk, fontFamily: font.semibold }]} numberOfLines={1}>{o.label}</Text>
+          <Pressable key={o.value} testID={`segment-${o.value}`} accessibilityRole="tab" accessibilityLabel={o.label} accessibilityState={{ selected }} onPress={() => onChange(o.value)} style={styles.segment}>
+            <Text style={[styles.segmentLabel, compact && styles.segmentLabelCompact, selected && styles.segmentLabelOn, selected && solid && { color: color.peachInk, fontFamily: font.semibold }]} numberOfLines={1}>{o.label}</Text>
           </Pressable>
         );
       })}
@@ -150,10 +150,12 @@ const styles = StyleSheet.create({
   glass: { backgroundColor: 'rgba(14,19,32,0.62)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.18)' },
   glassActive: { borderColor: color.peachLine, borderWidth: 1, backgroundColor: 'rgba(30,22,24,0.72)' },
   segments: { flexDirection: 'row', height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.055)', padding: 2 },
+  segmentsCompact: { height: 36, borderRadius: 18, backgroundColor: 'rgba(14,19,32,0.62)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.18)' },
   segment: { flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 19 },
   segmentPill: { position: 'absolute', top: 2, bottom: 2, left: 2, borderRadius: 19, borderWidth: 1, borderColor: 'transparent' },
   segmentOn: { backgroundColor: color.peachFill, borderColor: color.peachLine },
   segmentLabel: { fontFamily: font.medium, fontSize: 14, color: color.textSecondary },
+  segmentLabelCompact: { fontSize: 12.5 },
   segmentLabelOn: { color: color.text },
   row: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 11, minHeight: 66 },
   rowLine: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: color.hairlineStrong },

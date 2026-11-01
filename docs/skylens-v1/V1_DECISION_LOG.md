@@ -21,9 +21,10 @@ Conflicts between the documents and the repository, each with its resolution. Ro
 | 15 | `V1_IMPLEMENTATION_PLAN.md` in the PRD, `V1_INTEGRATION_PLAN.md` in the prompt | Used `V1_INTEGRATION_PLAN.md` | The prompt outranks the PRD |
 | 16 | PRD event names imply analytics | None added. Frame timing stays on the device | "Only where permission and product policy allow", and no policy exists yet |
 | 17 | Deep Atlas as a Pro feature | Free in Stage 1 | Packaging is marked "validate", and purchases are untested |
-| 18 | AR could inherit Atlas grids through shared layers | AR keeps today's overlay in every mode | Preserves AR, which has no hardware evidence yet |
+| 18 | AR could inherit Atlas grids through shared layers | AR and the detail page use Explore's layers and star limit in every mode. AR's constellation button still works | Preserves AR, which has no hardware evidence yet. In Observe, AR starts with lines off until that button is used |
 | 19 | Concept art shows sample figures such as "2024 YR4 140 m" | Nothing copied from it | The pack marks them as invented |
 | 20 | Pack read in one go or by tile | By tile, through a storage interface with a bounded cache | Meets "loads incrementally" and leaves the door open for downloadable packs |
+| 21 | At tight zoom the coarse Milky Way map swells bright-star traces into soft blobs, which read as fake nebulae | Deep Atlas fades the map out between 20° and 6°. Explore keeps it | "Avoid fake bright nebula positions", and Explore must stay as approved |
 
 ## Features at risk, and how they are protected
 

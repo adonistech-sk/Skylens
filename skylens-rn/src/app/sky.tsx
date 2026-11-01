@@ -1,31 +1,25 @@
 import { router } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ViewState } from '../astronomy/camera';
 import { altitude, vectorHorizontal } from '../astronomy/core';
 import { directionOf, locate } from '../astronomy/locator';
 import { object, TYPE_NAMES } from '../data/catalog';
-import { IconButton, press, TabBar } from '../design/components';
+import { deepPack, onDeepPackChange } from '../data/catalogs/runtime';
+import { IconButton, press, SegmentedControl, TabBar } from '../design/components';
 import { Tap } from '../design/motion';
 import { Icon } from '../design/Icon';
 import { color, font, type } from '../design/tokens';
 import { CompassSession } from '../features/sky/CompassSession';
+import { LayersPanel } from '../features/sky/LayersPanel';
 import { skyBrightness } from '../features/sky/scene';
 import { SkyHandle, SkyView } from '../features/sky/SkyView';
 import { DEMO_MODE } from '../state/demo';
-import { getState, Layers, requestFocus, select, setLayer, setNightPreview, skyTime, useObserver, useStore } from '../state/store';
+import { MODE_LABELS, SkyMode } from '../state/skyModes';
+import { getState, requestFocus, select, setNightPreview, setSkyMode, skyTime, toggleFavorite, useObserver, useStore } from '../state/store';
 
-const LAYERS: { key: keyof Layers; label: string }[] = [
-  { key: 'constellations', label: 'Constellations' },
-  { key: 'labels', label: 'Labels' },
-  { key: 'planets', label: 'Planets, Sun and Moon' },
-  { key: 'deepSky', label: 'Deep sky objects' },
-  { key: 'milkyWay', label: 'Milky Way' },
-  { key: 'artwork', label: 'Orion artwork' },
-  { key: 'ground', label: 'True horizon' },
-  { key: 'framing', label: 'Landscape framing (artistic)' },
-];
+const MODES: { value: SkyMode; label: string }[] = (['observe', 'explore', 'atlas'] as SkyMode[]).map((value) => ({ value, label: MODE_LABELS[value] }));
 
 /** Alnilam, the middle of the belt: the anchor of the design's opening composition. */
 const ORION_CENTRE = 'star:26311';
@@ -54,7 +48,11 @@ export default function SkyScreen() {
   const orientation = useRef(null);
   const nightPreview = useStore((s) => s.nightPreview);
   const selection = useStore((s) => s.selection);
-  const layers = useStore((s) => s.layers);
+  const airless = useStore((s) => !s.layers.atmosphere);
+  const skyMode = useStore((s) => s.skyMode);
+  const modesOn = useStore((s) => s.flags.skyModes);
+  const favorite = useStore((s) => (s.selection ? s.favorites.includes(s.selection) : false));
+  const { height } = useWindowDimensions();
   const live = useStore((s) => s.clock.anchorSky === null);
   const observer = useObserver();
 
@@ -77,6 +75,17 @@ export default function SkyScreen() {
     return () => clearInterval(id);
   }, [observer, live]);
 
+  // Reported only in Deep Atlas, the one place the pack is used.
+  const [packNote, setPackNote] = useState<string | null>(null);
+  useEffect(() => {
+    const check = () => {
+      const pack = deepPack();
+      setPackNote(skyMode !== 'atlas' ? null : pack.status === 'failed' ? 'Deep stars unavailable · showing bundled stars' : pack.status === 'opening' ? 'Loading deep stars…' : pack.badTiles ? 'Some deep stars could not be read' : null);
+    };
+    check();
+    return onDeepPackChange(check);
+  }, [skyMode]);
+
   return (
     <View style={styles.root}>
       <SkyView handleRef={handle} orientationRef={compass ? orientation : undefined} bottomInset={controlsBottom + 132} topInset={insets.top + 56} initial={opening}
@@ -86,17 +95,21 @@ export default function SkyScreen() {
 
       <View style={[styles.top, { top: insets.top + 6 }]} pointerEvents="box-none">
         <IconButton testID="sky-search" name="search" label="Search the sky" onPress={() => router.push('/search')} />
-        <View style={{ flex: 1 }} pointerEvents="none" />
+        {modesOn ? <SegmentedControl compact value={skyMode} onChange={setSkyMode} options={MODES} style={styles.modes} /> : <View style={{ flex: 1 }} pointerEvents="none" />}
         <IconButton testID="sky-layers" name="layers" label="Sky layers" onPress={() => setPanel(panel === 'layers' ? 'none' : 'layers')} active={panel === 'layers'} />
       </View>
 
-      <View style={[styles.status, { top: insets.top + 14 }]} pointerEvents="box-none">
+      <View style={[styles.status, { top: insets.top + (modesOn ? 58 : 14) }]} pointerEvents="box-none">
         {!live && !DEMO_MODE ? (
           <Pressable onPress={() => router.push('/time-travel')} style={styles.simulated} accessibilityRole="button" accessibilityLabel="Simulated time. Open Time Travel.">
             <Text style={styles.simulatedText}>Simulated time</Text>
           </Pressable>
         ) : null}
-        {daylight ? (
+        {packNote ? <View testID="sky-pack-note" style={styles.simulated}><Text style={styles.simulatedText}>{packNote}</Text></View> : null}
+        {daylight && airless ? (
+          <View testID="sky-airless" style={styles.simulated} accessibilityLabel="Atmosphere is off. This is a simulated dark sky, and the clock is unchanged."><Text style={styles.simulatedText}>{`${sunUp ? 'Daytime' : 'Twilight'} · airless sky, simulated`}</Text></View>
+        ) : null}
+        {daylight && !airless ? (
           <Pressable testID="sky-night-preview" onPress={() => setNightPreview(!nightPreview)} style={styles.simulated} accessibilityRole="button"
             accessibilityLabel={nightPreview ? 'Night preview is on. Return to the real sky.' : `It is ${sunUp ? 'daytime' : 'twilight'}. Show a night preview of the stars.`}>
             <Text style={styles.simulatedText}>{nightPreview ? 'Night preview · Show real sky' : `${sunUp ? 'Daytime' : 'Twilight'} sky · Preview at night`}</Text>
@@ -104,26 +117,33 @@ export default function SkyScreen() {
         ) : null}
       </View>
 
-      {panel === 'layers' ? (
-        <View style={[styles.layers, { top: insets.top + 58 }]}>
-          {LAYERS.map((l) => (
-            <View key={l.key} style={styles.layerRow}>
-              <Text style={styles.layerLabel}>{l.label}</Text>
-              <Switch value={layers[l.key]} onValueChange={(v) => setLayer(l.key, v)} trackColor={{ true: color.peachDeep, false: 'rgba(255,255,255,0.14)' }} thumbColor="#fff" accessibilityLabel={l.label} />
-            </View>
-          ))}
-        </View>
-      ) : null}
+      {panel === 'layers' ? <LayersPanel top={insets.top + 58} maxHeight={height * 0.58} /> : null}
 
       {selected && location ? (
-        <Pressable testID="sky-selection" onPress={() => router.push({ pathname: '/object/[id]', params: { id: selected.id } })}
-          style={({ pressed }) => [styles.card, { bottom: controlsBottom + 138 }, press(pressed)]} accessibilityRole="button" accessibilityLabel={`${selected.name}. Open details.`}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.cardTitle} numberOfLines={1}>{selected.name}</Text>
-            <Text style={type.caption} numberOfLines={2}>{TYPE_NAMES[selected.type]} · {location.explanation}</Text>
+        <View style={[styles.card, { bottom: controlsBottom + 138 }]}>
+          <Pressable testID="sky-selection" onPress={() => router.push({ pathname: '/object/[id]', params: { id: selected.id } })}
+            style={({ pressed }) => [styles.cardHead, press(pressed)]} accessibilityRole="button" accessibilityLabel={`${selected.name}. Open details.`}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardTitle} numberOfLines={1}>{selected.name}</Text>
+              <Text style={type.caption} numberOfLines={2}>{TYPE_NAMES[selected.type]} · {location.explanation}</Text>
+            </View>
+            <Icon name="chevron" size={20} />
+          </Pressable>
+          <View style={styles.cardActions}>
+            <Pressable testID="sky-locate" onPress={() => requestFocus(selected.id)} style={({ pressed }) => [styles.cardAction, press(pressed)]} accessibilityRole="button" accessibilityLabel={`Center ${selected.name}`}>
+              <Icon name="target" size={18} tint={color.peach} /><Text style={styles.cardActionText}>Locate</Text>
+            </Pressable>
+            <Pressable testID="sky-learn" onPress={() => router.push({ pathname: '/object/[id]', params: { id: selected.id } })} style={({ pressed }) => [styles.cardAction, press(pressed)]} accessibilityRole="button" accessibilityLabel={`Learn about ${selected.name}`}>
+              <Icon name="info" size={18} tint={color.peach} /><Text style={styles.cardActionText}>Learn</Text>
+            </Pressable>
+            <Pressable testID="sky-save" onPress={() => toggleFavorite(selected.id)} style={({ pressed }) => [styles.cardAction, press(pressed)]} accessibilityRole="button" accessibilityState={{ selected: favorite }} accessibilityLabel={favorite ? `Remove ${selected.name} from favorites` : `Save ${selected.name} to favorites`}>
+              <Icon name="star" size={18} tint={color.peach} filled={favorite} /><Text style={styles.cardActionText}>{favorite ? 'Saved' : 'Save'}</Text>
+            </Pressable>
+            <Pressable testID="sky-deselect" onPress={() => select(null)} style={({ pressed }) => [styles.cardClose, press(pressed)]} accessibilityRole="button" accessibilityLabel="Clear the selection" hitSlop={6}>
+              <Icon name="close" size={16} tint={color.textSecondary} />
+            </Pressable>
           </View>
-          <Icon name="chevron" size={20} />
-        </Pressable>
+        </View>
       ) : null}
 
       <View style={[styles.controls, { bottom: controlsBottom }]}>
@@ -155,10 +175,13 @@ const styles = StyleSheet.create({
   simulatedText: { fontFamily: font.medium, fontSize: 12, color: color.peach },
   note: { position: 'absolute', left: 74, right: 74, padding: 10, borderRadius: 14, backgroundColor: 'rgba(11,15,27,0.88)' },
   noteText: { fontFamily: font.medium, fontSize: 12.5, lineHeight: 17, color: color.text, textAlign: 'center' },
-  layers: { position: 'absolute', right: 18, width: 250, borderRadius: 18, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: 'rgba(11,15,27,0.94)', borderWidth: StyleSheet.hairlineWidth, borderColor: color.hairlineStrong },
-  layerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 },
-  layerLabel: { fontFamily: font.regular, fontSize: 14, color: color.text },
-  card: { position: 'absolute', left: 18, right: 18, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 18, backgroundColor: 'rgba(11,15,27,0.92)', borderWidth: StyleSheet.hairlineWidth, borderColor: color.hairlineStrong },
+  modes: { flex: 1, marginHorizontal: 10 },
+  card: { position: 'absolute', left: 18, right: 18, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 6, borderRadius: 18, backgroundColor: 'rgba(11,15,27,0.92)', borderWidth: StyleSheet.hairlineWidth, borderColor: color.hairlineStrong },
+  cardHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  cardActions: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.hairline },
+  cardAction: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 40 },
+  cardActionText: { fontFamily: font.medium, fontSize: 13, color: color.text },
+  cardClose: { width: 34, height: 40, alignItems: 'center', justifyContent: 'center' },
   cardTitle: { fontFamily: font.serif, fontSize: 22, lineHeight: 26, color: color.text },
   controls: { position: 'absolute', left: 18, right: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   identify: { width: 66, height: 66, borderRadius: 33, alignItems: 'center', justifyContent: 'center', borderWidth: 1.6, borderColor: '#F0A070', backgroundColor: 'rgba(44,24,16,0.62)', shadowColor: '#F59A5C', shadowOpacity: 0.62, shadowRadius: 15, shadowOffset: { width: 0, height: 0 } },

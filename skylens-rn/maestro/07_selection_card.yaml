@@ -1,0 +1,35 @@
+# The selection card's actions, on the same fixed star as flow 05.
+appId: sk.skylens.app
+---
+- launchApp
+# Screenshot builds open on the sky, and a link sent this early would lose to start-up.
+- extendedWaitUntil:
+    visible:
+      id: sky-search
+    timeout: 90000
+- runFlow:
+    file: lib/settle.yaml
+    env:
+      WAIT: 5000
+- tapOn:
+    point: "30%,32%"
+- extendedWaitUntil:
+    visible:
+      id: sky-save
+    timeout: 8000
+- tapOn:
+    id: sky-save
+- assertVisible: "Remove Betelgeuse from favorites"
+- tapOn:
+    id: sky-locate
+- runFlow:
+    file: lib/settle.yaml
+    env:
+      WAIT: 2000
+- takeScreenshot: flow_selection_card
+- tapOn:
+    id: sky-save
+- tapOn:
+    id: sky-deselect
+- assertNotVisible:
+    id: sky-selection

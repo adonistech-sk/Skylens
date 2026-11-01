@@ -1,16 +1,21 @@
-import { Canvas, createPicture, Picture, SkPicture, Skia, useFont, useImage } from '@shopify/react-native-skia';
+import { Canvas, createPicture, Group, Picture, SkPicture, Skia, useFont, useImage } from '@shopify/react-native-skia';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, LayoutChangeEvent, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { useSharedValue } from 'react-native-reanimated';
+import { useSharedValue, withTiming } from 'react-native-reanimated';
 import { angleBetween, Mat3, vectorHorizontal, Vec3 } from '../../astronomy/core';
-import { Camera, dragView, flight, flightDuration, FOV_RANGE, orientationFor, pointsPerDegree, Projection, ViewState } from '../../astronomy/camera';
+import { anchorView, Camera, dragView, flight, flightDuration, FOV_RANGE, orientationFor, pointsPerDegree, project, Projection, unproject, ViewState } from '../../astronomy/camera';
 import { directionOf } from '../../astronomy/locator';
-import { object, stars } from '../../data/catalog';
+import { directionAt, object, stars } from '../../data/catalog';
+import { placeTile, StarTile } from '../../data/catalogs/deepPack';
+import { deepPack, onDeepPackChange } from '../../data/catalogs/runtime';
+import { DEEP_PACK } from '../../data/generated/deepPack';
 import { DEMO_MODE } from '../../state/demo';
+import { BUNDLED_LIMIT, Layers, MODE_DEFAULTS, SkyMode, starLimit } from '../../state/skyModes';
 import { getState, select, skyTime, useObserver, useStore } from '../../state/store';
-import { makeEffect, renderFrame, SELECTION_SETTLE, SkyResources } from './renderer';
-import { buildStarField, computeMoment, hitTest, SkyMoment, StarField, yearsSinceJ2000 } from './scene';
+import { now, recordFrame } from './perf';
+import { emptyResult, frameBrightness, makeEffect, renderFrame, SELECTION_SETTLE, SkyResources } from './renderer';
+import { buildStarField, computeMoment, HitContext, hitTest, newCellBuffer, querySky, SkyMoment, StarField, yearsSinceJ2000 } from './scene';
 
 export interface SkyHandle {
   /** The object nearest the centre of the view. */
@@ -64,6 +69,9 @@ export function SkyView({
   useEffect(() => { if (resources) sharedResources.current = resources; }, [resources]);
 
   const picture = useSharedValue<SkPicture>(emptyPicture());
+  // The last frame of the previous mode, fading out over the new one.
+  const previous = useSharedValue<SkPicture>(emptyPicture());
+  const previousOpacity = useSharedValue(0);
   const size = useRef({ width: 0, height: 0 });
   const [layoutTick, setLayoutTick] = useState(0);
   const view = useRef<ViewState>({ azimuth: 180, altitude: 36, fov: 46, ...initial });
@@ -77,6 +85,9 @@ export function SkyView({
   const glide = useRef<{ vx: number; vy: number; last: number } | null>(null);
   const selectedAt = useRef(0);
   const selectedId = useRef<string | null>(null);
+  const cells = useRef(newCellBuffer());
+  const lastFrame = useRef<HitContext | null>(null);
+  const pinchAnchor = useRef<Vec3 | null>(null);
 
   const observer = useObserver();
   const layers = useStore((s) => s.layers);
@@ -84,6 +95,9 @@ export function SkyView({
   const focus = useStore((s) => s.focus);
   const nightVision = useStore((s) => s.nightVision);
   const nightPreview = useStore((s) => s.nightPreview);
+  const skyMode = useStore((s) => s.skyMode);
+  const modes = useStore((s) => s.modes);
+  const flags = useStore((s) => s.flags);
 
   useEffect(() => { AccessibilityInfo.isReduceMotionEnabled().then((v) => { reduceMotion.current = v; }).catch(() => {}); }, []);
 
@@ -112,9 +126,37 @@ export function SkyView({
     return momentRef.current!;
   };
 
+  /** AR and the detail page keep today's sky whatever mode the map is in. */
+  const embedded = overlayOnly || !!focusId;
+
+  const frameLayers = (): Layers => {
+    const s = getState();
+    if (!embedded) return hideGround ? { ...s.layers, ground: false } : s.layers;
+    const base = s.modes.explore.layers;
+    return { ...base, ground: base.ground && !hideGround, constellations: overlayOnly ? s.layers.constellations : base.constellations };
+  };
+
+  /** Brings the pack tiles this view can see into a query, and asks for the rest. */
+  const gatherTiles = (cellList: Uint16Array, count: number, field: StarField): StarTile[] => {
+    const pack = deepPack();
+    pack.want(cellList, count, field.years);
+    const tiles: StarTile[] = [];
+    let moved = 0;
+    for (let i = 0; i < count; i++) {
+      const t = pack.tile(cellList[i]);
+      if (!t || !t.count) continue;
+      // Only a few tiles move per frame, so a long jump in time can't stall a frame.
+      if (Math.abs(t.years - field.years) > 2 && moved < 4) { placeTile(t, field.years, directionAt); moved++; }
+      tiles.push(t);
+    }
+    if (moved === 4) schedule();
+    return tiles;
+  };
+
   const draw = () => {
     pending.current = null;
     if (!resources || !size.current.width) return;
+    const started = now();
     const f = flightState.current;
     if (f) {
       const elapsed = (Date.now() - f.start) / 1000;
@@ -137,12 +179,33 @@ export function SkyView({
     const selectionAge = (Date.now() - selectedAt.current) / 1000;
     const obj = sel ? object(sel) : null;
     selectionDir.current = obj ? directionOf(obj, new Date(moment.time), observer) : null;
+    const state = getState();
+    const cam = camera();
+    const layers = frameLayers();
+    const field = fieldRef.current!;
+    const mode: SkyMode = embedded || !state.flags.skyModes ? 'explore' : state.skyMode;
+    const settings = embedded ? MODE_DEFAULTS.explore : state.modes[mode];
+    const isMoving = moving.current || !!glide.current;
+    const brightness = frameBrightness(moment.sunAltitude, layers, state.nightPreview, overlayOnly);
+    const limit = starLimit(mode, settings, cam.fov, brightness, isMoving);
+    const useIndex = state.flags.catalogsV1;
+    const wantDeep = useIndex && state.flags.deepPack && mode === 'atlas' && layers.stars && limit > BUNDLED_LIMIT;
+    const pack = wantDeep ? deepPack() : null;
+    const query = useIndex ? querySky(cam, moment, field.years, pack?.status === 'ready' ? (c) => pack.fastest(c) : null, cells.current) : null;
+    if (query && pack) query.tiles = gatherTiles(query.cells, query.count, field);
+    const result = emptyResult();
     picture.value = renderFrame({
-      camera: camera(), moment, field: fieldRef.current!, layers: hideGround ? { ...getState().layers, ground: false } : getState().layers, selection: focusId ? null : sel, selectionDir: focusId ? null : selectionDir.current,
-      moving: moving.current || !!glide.current, overlayOnly, bottomInset, topInset, showCompass, nightVision: getState().nightVision,
-      selectionAge: reduceMotion.current ? SELECTION_SETTLE : selectionAge, nightPreview: getState().nightPreview,
-      framing: !hideGround && !overlayOnly && showCompass && getState().layers.ground && getState().layers.framing,
+      camera: cam, moment, field, layers, selection: focusId ? null : sel, selectionDir: focusId ? null : selectionDir.current,
+      chart: { mode, settings, limit, query, readout: mode === 'atlas' && showCompass }, result, selectionName: focusId ? null : obj?.name ?? null,
+      moving: isMoving, overlayOnly, bottomInset, topInset, showCompass, nightVision: state.nightVision,
+      selectionAge: reduceMotion.current ? SELECTION_SETTLE : selectionAge, nightPreview: state.nightPreview,
+      framing: !hideGround && !overlayOnly && showCompass && layers.ground && layers.framing,
     }, resources);
+    lastFrame.current = { camera: cam, moment, field, layers, mode, limit, brightness, overlayOnly, query, bottomEdge: size.current.height - bottomInset, labels: result.labels };
+    if (!embedded) {
+      const base = stars().count;
+      recordFrame(now() - started, { indexed: base + (state.flags.deepPack ? DEEP_PACK.stars : 0), loaded: base + (pack?.loadedStars ?? 0), scanned: result.scanned, drawn: result.drawn, limit });
+    }
     onViewChange?.(view.current);
     const settling = !!sel && !reduceMotion.current && selectionAge < SELECTION_SETTLE;
     if (flightState.current || orientationRef || glide.current || settling) schedule();
@@ -164,7 +227,21 @@ export function SkyView({
     }, 250);
     return () => { clearInterval(id); if (pending.current !== null) cancelAnimationFrame(pending.current); pending.current = null; };
   }, []);
-  useEffect(() => { schedule(); }, [resources, layers, selection, nightVision, nightPreview, observer, layoutTick]);
+  useEffect(() => { schedule(); }, [resources, layers, selection, nightVision, nightPreview, observer, layoutTick, skyMode, modes, flags]);
+  useEffect(() => onDeepPackChange(() => drawRef.current()), []);
+
+  // The old sky fades out over the new one. Objects stay put, so only the extras change.
+  const firstMode = useRef(true);
+  const fadeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (firstMode.current) { firstMode.current = false; return; }
+    if (embedded || reduceMotion.current || DEMO_MODE) return;
+    previous.value = picture.value;
+    previousOpacity.value = 1;
+    previousOpacity.value = withTiming(0, { duration: 260 });
+    if (fadeTimer.current) clearTimeout(fadeTimer.current);
+    fadeTimer.current = setTimeout(() => { previous.value = emptyPicture(); }, 320);
+  }, [skyMode]);
 
   // Fly to whatever was requested, from search, detail or Tonight.
   useEffect(() => {
@@ -182,9 +259,23 @@ export function SkyView({
   }, [focus?.nonce, resources]);
 
   const identify = (x: number, y: number, radius = 34) => {
-    if (!fieldRef.current || !momentRef.current) return null;
-    return hitTest(x, y, camera(), momentRef.current, fieldRef.current, getState().layers.deepSky, radius);
+    const last = lastFrame.current;
+    if (!last) return null;
+    return hitTest(x, y, { ...last, camera: camera() }, radius);
   };
+
+  // Screenshot mode only: lets the browser flows ask where the app really put something.
+  if (DEMO_MODE && !embedded) {
+    (globalThis as { __skyProbe?: unknown }).__skyProbe = {
+      view: () => view.current,
+      point: (id: string) => {
+        const obj = object(id), last = lastFrame.current;
+        const dir = obj && last ? directionOf(obj, new Date(last.moment.time), observer) : null;
+        return dir ? project(camera(), dir) : null;
+      },
+      limit: () => lastFrame.current?.limit ?? null,
+    };
+  }
 
   if (handleRef) {
     handleRef.current = {
@@ -206,22 +297,30 @@ export function SkyView({
     })
     .onFinalize(() => { moving.current = false; schedule(); });
   const pinch = Gesture.Pinch().runOnJS(true)
-    .onStart(() => { flightState.current = null; glide.current = null; moving.current = true; start.current = view.current; })
+    .onStart((e) => {
+      flightState.current = null; glide.current = null; moving.current = true; start.current = view.current;
+      // While the compass aims the view, a pinch only changes the zoom.
+      pinchAnchor.current = orientationRef?.current ? null : unproject(camera(), e.focalX, e.focalY);
+    })
     .onUpdate((e) => {
-      view.current = { ...view.current, fov: Math.min(FOV_RANGE[1], Math.max(FOV_RANGE[0], start.current.fov / e.scale)) };
+      const fov = Math.min(FOV_RANGE[1], Math.max(FOV_RANGE[0], start.current.fov / e.scale));
+      const zoomed = { ...view.current, fov };
+      view.current = pinchAnchor.current ? anchorView(zoomed, pinchAnchor.current, e.focalX, e.focalY, size.current.width, size.current.height, projection) : zoomed;
       schedule();
     })
-    .onFinalize(() => { moving.current = false; schedule(); });
+    .onFinalize(() => { moving.current = false; pinchAnchor.current = null; schedule(); });
   const tap = Gesture.Tap().runOnJS(true).maxDistance(10).onEnd((e, success) => {
     if (!success) return;
     const hit = identify(e.x, e.y);
     select(hit?.id ?? null);
     onTapObject?.(hit?.id ?? null);
   });
-  const doubleTap = Gesture.Tap().runOnJS(true).numberOfTaps(2).onEnd((_e, success) => {
+  const doubleTap = Gesture.Tap().runOnJS(true).numberOfTaps(2).onEnd((e, success) => {
     if (!success) return;
     const from = view.current;
-    flightState.current = { from, to: { ...from, fov: Math.max(FOV_RANGE[0], from.fov * 0.5) }, duration: reduceMotion.current ? 0 : 0.35, start: Date.now() };
+    const zoomed = { ...from, fov: Math.max(FOV_RANGE[0], from.fov * 0.5) };
+    const to = orientationRef?.current ? zoomed : anchorView(zoomed, unproject(camera(), e.x, e.y), e.x, e.y, size.current.width, size.current.height, projection);
+    flightState.current = { from, to, duration: reduceMotion.current ? 0 : 0.35, start: Date.now() };
     schedule();
   });
   // Taps run alongside the pan: a tap fails by itself once the finger moves 10pt, whereas
@@ -236,6 +335,7 @@ export function SkyView({
   const canvas = (
     <Canvas style={{ flex: 1 }}>
       <Picture picture={picture} />
+      <Group opacity={previousOpacity}><Picture picture={previous} /></Group>
     </Canvas>
   );
   return (

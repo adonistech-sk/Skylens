@@ -43,3 +43,20 @@ These need the Simulator or a physical iPhone.
 | Real StoreKit products, purchase and restore | App Store Connect products |
 | VoiceOver and Reduce Motion with the setting on | Physical iPhone |
 | Fonts as rendered on iOS | Simulator run after a commit |
+
+## V1 Stage 1
+
+| Check | Command | Result |
+|---|---|---|
+| Unit, science and catalog tests | `npx vitest run` | See `IMPLEMENTATION_STATUS.md` |
+| Validation report | `WRITE_VALIDATION=1 npx vitest run tests/validation.test.ts` | Writes `docs/skylens-v1/VALIDATION_REPORT.json` |
+| Star loop timing | `BENCH=1 npx vitest run tests/perf.test.ts` | Node only, a comparison between code paths |
+| Sky state captures | `node scripts/web-states.mjs <out>` | Web only |
+| Reference fixtures | `scripts/reference/` | Fetched by hand, never by the app |
+
+Bugs this work found:
+
+- **A selection ring sat up to 35.85′ from its planet near the horizon.** Fixed by drawing everything in one frame.
+- **Faint zoomed stars could not be tapped,** and deep-sky objects could be tapped when not drawn. Taps now reach only what the frame drew.
+- **Pinch ignored the fingers.** It now zooms about them.
+- **A test helper counted a boundary's antipode as inside it,** which read as 51% agreement. The data was sound.

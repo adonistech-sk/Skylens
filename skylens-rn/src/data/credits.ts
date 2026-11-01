@@ -28,7 +28,7 @@ export const DATA_SOURCES = [
   'Yale Bright Star Catalogue, 5th revised edition, via NASA HEASARC.',
   'IAU Catalog of Star Names (WGSN).',
   'NGC 2000.0 (Sinnott, ed.) and the Messier table, via NASA HEASARC.',
-  'Constellation figures from d3-celestial by Olaf Frohn (BSD-3-Clause).',
+  'Constellation figures and boundaries from d3-celestial by Olaf Frohn (BSD-3-Clause).',
   'Meteor shower parameters from the IMO Meteor Shower Working List.',
   'Newsreader and Inter typefaces (SIL Open Font License).',
 ];

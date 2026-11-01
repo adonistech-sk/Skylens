@@ -1,4 +1,4 @@
-import { cross, DEG, Horizontal, horizontalVector, Mat3, mul, normalize180, normalize360, normalized, transpose, Vec3 } from './core';
+import { cross, DEG, Horizontal, horizontalVector, Mat3, mul, normalize180, normalize360, normalized, transpose, Vec3, vectorHorizontal } from './core';
 
 export type Projection = 'stereographic' | 'rectilinear';
 
@@ -71,6 +71,25 @@ export function dragView(v: ViewState, dx: number, dy: number, perDegree: number
     azimuth: normalize360(v.azimuth - dx / perDegree / cosine),
     altitude: Math.min(89.9, Math.max(-20, v.altitude + dy / perDegree)),
   };
+}
+
+/**
+ * Turns a view so that a direction lands on a screen point, for zooming about the fingers.
+ * Azimuth and altitude don't map linearly onto the screen away from its centre, so this
+ * closes in over a few passes.
+ */
+export function anchorView(v: ViewState, target: Vec3, x: number, y: number, width: number, height: number, projection: Projection): ViewState {
+  const goal = vectorHorizontal(target);
+  let next = v;
+  for (let i = 0; i < 10; i++) {
+    const now = vectorHorizontal(unproject({ orientation: orientationFor(next.azimuth, next.altitude), fov: next.fov, width, height, projection }, x, y));
+    // Azimuth loses its meaning at the zenith, so only altitude steers there.
+    const turn = Math.abs(goal.altitude) > 88 || Math.abs(now.altitude) > 88 ? 0 : normalize180(goal.azimuth - now.azimuth);
+    const tilt = goal.altitude - now.altitude;
+    next = { ...next, azimuth: normalize360(next.azimuth + turn), altitude: Math.min(89.9, Math.max(-20, next.altitude + tilt)) };
+    if (Math.abs(turn) + Math.abs(tilt) < 0.001) break;
+  }
+  return next;
 }
 
 /** Longer flights take longer, within limits that keep the sky feeling direct. */

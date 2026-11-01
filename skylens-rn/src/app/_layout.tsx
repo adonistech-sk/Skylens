@@ -8,10 +8,12 @@ import { ReactNode, useEffect } from 'react';
 import { Platform, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaInsetsContext, SafeAreaProvider } from 'react-native-safe-area-context';
+import { object } from '../data/catalog';
+import { restoreDeepFavorites } from '../data/catalogs/runtime';
 import { color } from '../design/tokens';
 import { refreshEntitlement } from '../features/subscription/iap';
 import { DEMO_MODE } from '../state/demo';
-import { hydrate, useStore } from '../state/store';
+import { bumpCatalog, getState, hydrate, useStore } from '../state/store';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -29,6 +31,9 @@ export default function RootLayout() {
 
   useEffect(() => { hydrate().then(() => { if (!DEMO_MODE) refreshEntitlement().catch(() => {}); }); }, []);
   useEffect(() => { if (fonts && hydrated) SplashScreen.hideAsync().catch(() => {}); }, [fonts, hydrated]);
+  useEffect(() => {
+    if (hydrated) restoreDeepFavorites(getState().favorites, (id) => object(id) !== null).then((changed) => { if (changed) bumpCatalog(); }).catch(() => {});
+  }, [hydrated]);
 
   if (!fonts || !hydrated) return <View style={{ flex: 1, backgroundColor: color.base }} />;
 
@@ -44,6 +49,7 @@ export default function RootLayout() {
             <Stack.Screen name="time-travel" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="ar" options={{ animation: 'fade' }} />
             <Stack.Screen name="location-search" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="sky-engine" options={{ animation: 'slide_from_right' }} />
           </Stack>
         </ScreenshotInsets>
       </SafeAreaProvider>

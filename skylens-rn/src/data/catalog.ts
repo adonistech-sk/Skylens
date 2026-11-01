@@ -3,6 +3,7 @@
 import { ALL_BODIES, BodyId, bodyName, constellationOf, DEG, Equatorial, Vec3 } from '../astronomy/core';
 import raw from './generated/catalog.json';
 import editorial from './generated/editorial.json';
+import { StarRow } from './catalogs/deepPack';
 import { STAR_COUNT, STAR_RECORD, STARS_B64 } from './generated/stars';
 
 export type ObjectType =
@@ -124,17 +125,19 @@ export function stars(): StarTable {
 }
 
 /** J2000 unit vector with linear proper motion applied. */
-export function starDirection(t: StarTable, i: number, years: number): Vec3 {
-  const a = t.ra[i] * DEG, d = t.dec[i] * DEG;
+export function directionAt(ra: number, dec: number, pmRA: number, pmDec: number, years: number): Vec3 {
+  const a = ra * DEG, d = dec * DEG;
   const sa = Math.sin(a), ca = Math.cos(a), sd = Math.sin(d), cd = Math.cos(d);
   const scale = ((years / 3_600_000) * Math.PI) / 180;
-  const e = t.pmRA[i] * scale, n = t.pmDec[i] * scale;
+  const e = pmRA * scale, n = pmDec * scale;
   const x = cd * ca - sa * e - sd * ca * n;
   const y = cd * sa + ca * e - sd * sa * n;
   const z = sd + cd * n;
   const l = Math.hypot(x, y, z);
   return [x / l, y / l, z / l];
 }
+
+export const starDirection = (t: StarTable, i: number, years: number): Vec3 => directionAt(t.ra[i], t.dec[i], t.pmRA[i], t.pmDec[i], years);
 
 /** Effective temperature (Ballesteros 2012), then Tanner Helland's Planckian fit. */
 export function starColor(bv: number): [number, number, number] {
@@ -196,10 +199,21 @@ export function constellationObject(c: ConstellationData): SkyObject {
   return { id: `con:${c.id}`, type: 'constellation', name: c.name, designations: [c.id, c.genitive], position: { raHours: c.center[0] / 15, decDeg: c.center[1] }, magnitude: null };
 }
 
+/** Stars read from the deep pack, once something has selected or saved them. */
+const deepStars = new Map<number, StarRow>();
+export const rememberDeepStar = (row: StarRow) => { deepStars.set(row.hip, row); };
+
+function deepStarObject(r: StarRow): SkyObject {
+  return {
+    id: `star:${r.hip}`, type: 'star', name: `HIP ${r.hip}`, designations: [], position: { raHours: r.ra / 15, decDeg: r.dec }, magnitude: Math.round(r.mag * 100) / 100,
+    star: { hip: r.hip, spectralType: null, colorIndex: Number.isNaN(r.bv) ? null : r.bv, parallaxMas: r.parallax > 0 ? r.parallax : null, bayer: null, flamsteed: null, hr: null, hd: null },
+  };
+}
+
 export function starObject(hip: number): SkyObject | null {
   const t = stars();
   const i = t.indexByHip.get(hip);
-  if (i === undefined) return null;
+  if (i === undefined) { const deep = deepStars.get(hip); return deep ? deepStarObject(deep) : null; }
   const m = starMeta.get(hip);
   const labels: string[] = [];
   if (m?.name && m.bayer) labels.push(m.bayer);
