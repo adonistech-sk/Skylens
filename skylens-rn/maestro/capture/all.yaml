@@ -2,10 +2,20 @@
 appId: sk.skylens.app
 ---
 - launchApp
+# A link sent during the very first launch loses to the start-up redirect, so wait for the
+# app to finish starting. Without this, 01_onboarding silently captured the sky.
+- extendedWaitUntil:
+    visible:
+      id: sky-search
+    timeout: 90000
 - runFlow:
     file: ../lib/open.yaml
     env:
       LINK: skylens://onboarding
+- extendedWaitUntil:
+    visible:
+      id: get-started
+    timeout: 20000
 - runFlow:
     file: ../lib/settle.yaml
     env:

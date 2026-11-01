@@ -86,7 +86,7 @@ export default function ObjectDetail() {
       <View style={styles.hero}>
         {hero ? <Image source={hero} style={StyleSheet.absoluteFill} contentFit="cover" />
           : <SkyView key={o.id} interactive={false} showCompass={false} hideGround focusId={o.id} initial={{ fov: o.type === 'constellation' ? 42 : 24 }} />}
-        <LinearGradient pointerEvents="none" colors={['rgba(6,10,20,0.35)', 'rgba(6,10,20,0)', color.base]} locations={[0, 0.3, 1]} style={StyleSheet.absoluteFill} />
+        <LinearGradient pointerEvents="none" colors={['rgba(6,10,20,0.35)', 'rgba(6,10,20,0)', 'rgba(6,10,20,0)', color.base]} locations={[0, 0.22, 0.52, 0.9]} style={StyleSheet.absoluteFill} />
       </View>
       <ScrollView contentContainerStyle={{ paddingTop: 262, paddingBottom: 128 + insets.bottom }} showsVerticalScrollIndicator={false}>
         <Reveal style={styles.titleBlock}>

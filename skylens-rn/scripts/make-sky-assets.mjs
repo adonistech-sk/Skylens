@@ -74,6 +74,13 @@ while (x < W) {
   if (!clear && (cluster || density > 0.31)) pine(x, groundRow + 12, size, size * (0.5 + 0.26 * fbm(tree, x * 0.21)));
   x += cluster ? 9 + fbm(tree, x * 0.15) * 22 : 34 + fbm(tree, x * 0.085) * 100;
 }
+// A low far treeline all the way round, so the ground never shows as a straight edge
+// where the sky reaches down between the large trees.
+for (let px = 0; px < W;) {
+  const size = 24 + fbm(tree, px * 0.031) * 44;
+  pine(px, groundRow + 12, size, size * 0.56);
+  px += 6 + fbm(tree, px * 0.19) * 18;
+}
 // A soft foot so the trees sink into the ground.
 for (let px = 0; px < W; px++) fill(px, groundRow - 3 - 7 * fbm(ridge2, px * 0.006, 3), 255);
 
