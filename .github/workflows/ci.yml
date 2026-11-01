@@ -52,6 +52,13 @@ jobs:
         run: |
           booted=$(xcrun simctl list devices booted | grep -oE '[0-9A-F-]{36}' | head -1)
           if [ -n "$booted" ]; then xcrun simctl io "$booted" screenshot simulator.png || true; fi
+      - name: Keep the screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-screenshots
+          path: /tmp/skylens-shots/*.png
+          if-no-files-found: warn
       - name: Keep the logs
         if: always()
         uses: actions/upload-artifact@v4
