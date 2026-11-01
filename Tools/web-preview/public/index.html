@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#050910">
+<title>SkyLens Preview</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="sky" aria-label="Sky view"></canvas>
+<canvas id="overlay" aria-hidden="true"></canvas>
+
+<header class="top">
+  <button class="chip" id="timeChip" aria-label="Time and location">
+    <span id="placeName">–</span>
+    <span class="data" id="clockText"></span>
+  </button>
+  <span class="chip data" id="heading" aria-hidden="true"></span>
+</header>
+
+<div class="bottom">
+  <div class="card" id="card" hidden>
+    <button class="cardMain" id="cardOpen">
+      <span class="cardTitle" id="cardTitle"></span>
+      <span class="cardText" id="cardText"></span>
+    </button>
+    <button class="iconClose" id="cardClose" aria-label="Clear selection">×</button>
+  </div>
+  <nav class="toolbar" aria-label="Sky controls">
+    <button data-open="explore" aria-label="Search and Explore"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/></svg></button>
+    <button data-open="tonight" aria-label="Tonight"><svg viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5Z"/></svg></button>
+    <button data-open="events" aria-label="Events"><svg viewBox="0 0 24 24"><rect x="4" y="5.5" width="16" height="15" rx="2.5"/><path d="M4 10h16M8.5 3v4M15.5 3v4"/></svg></button>
+    <button data-open="time" aria-label="Time Travel"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/></svg></button>
+    <button id="recenter" aria-label="Recenter"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg></button>
+    <button data-open="more" aria-label="More"><svg viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="18.5" cy="12" r="1.2"/></svg></button>
+  </nav>
+</div>
+
+<section class="sheet" id="sheet" hidden role="dialog" aria-modal="false">
+  <div class="grabber"></div>
+  <div class="sheetHead">
+    <button class="back" id="sheetBack" hidden aria-label="Back">‹</button>
+    <h1 id="sheetTitle"></h1>
+    <button class="iconClose" id="sheetClose" aria-label="Close">×</button>
+  </div>
+  <div class="sheetBody" id="sheetBody"></div>
+</section>
+
+<section class="welcome" id="welcome" hidden>
+  <h1>SkyLens</h1>
+  <p>Every star, planet and constellation above you, right now.</p>
+  <p class="quiet">The sky depends on where you stand. Your location stays in this browser.</p>
+  <button class="primary" id="welcomeLocate">Use Current Location</button>
+  <button class="secondary" id="welcomePick">Choose a Place</button>
+</section>
+
+<div class="loading" id="loading">Loading 118,217 stars…</div>
+<script src="app.js"></script>
+</body>
+</html>

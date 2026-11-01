@@ -1,0 +1,10 @@
+*.ppm
+*.xcuserstate
+.DS_Store
+.build-wasm/
+.build/
+.swiftpm/
+AuthKey_*.p8
+DerivedData/
+node_modules/
+xcuserdata/

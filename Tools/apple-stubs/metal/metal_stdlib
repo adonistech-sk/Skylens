@@ -1,0 +1,35 @@
+// A stand-in for Metal's standard library, covering what SkyShaders.metal uses, so
+// Clang can parse the shaders on a machine without the Metal compiler. It finds
+// undeclared names, type mismatches and syntax errors. It cannot prove GPU validity.
+#pragma once
+typedef unsigned int uint;
+namespace metal {
+struct float2 { float x, y; float2() : x(0), y(0) {} float2(float v) : x(v), y(v) {} float2(float a, float b) : x(a), y(b) {} };
+struct float3 { union { struct { float x, y, z; }; struct { float r, g, b; }; float2 xy; float2 rg; };
+    float3() : x(0), y(0), z(0) {} float3(float v) : x(v), y(v), z(v) {} float3(float a, float b, float c) : x(a), y(b), z(c) {} float3(float2 v, float c) : x(v.x), y(v.y), z(c) {} };
+struct float4 { union { struct { float x, y, z, w; }; struct { float r, g, b, a; }; float2 xy; float3 xyz; float3 rgb; struct { float pad0, pad1; float2 zw; }; };
+    float4() : x(0), y(0), z(0), w(0) {} float4(float a0, float b0, float c, float d) : x(a0), y(b0), z(c), w(d) {} float4(float3 v, float d) : x(v.x), y(v.y), z(v.z), w(d) {} float4(float2 v, float c, float d) : x(v.x), y(v.y), z(c), w(d) {} };
+struct packed_float3 { float x, y, z; operator float3() const { return float3(x, y, z); } };
+struct float3x3 { float3 c[3]; };
+#define OPS(T) \
+    inline T operator+(T a, T b); inline T operator-(T a, T b); inline T operator*(T a, T b); inline T operator/(T a, T b); \
+    inline T operator*(T a, float b); inline T operator*(float a, T b); inline T operator/(T a, float b); inline T operator-(T a); \
+    inline T operator+=(T &a, T b); inline float dot(T a, T b); inline float length(T a); inline T normalize(T a); \
+    inline T mix(T a, T b, float t); inline T clamp(T a, T b, T c); inline T max(T a, T b); inline T abs(T a);
+OPS(float2) OPS(float3) OPS(float4)
+inline float2 operator*(float2 a, float2 b);
+inline float3 operator*(float3x3 m, float3 v);
+inline float3 operator*(float3 v, float3x3 m);
+inline float min(float a, float b); inline float max(float a, float b); inline float clamp(float a, float b, float c);
+inline float mix(float a, float b, float t); inline float smoothstep(float a, float b, float x); inline float fract(float x);
+inline float abs(float x); inline float sqrt(float x); inline float exp(float x); inline float pow(float a, float b);
+inline float asin(float x); inline float atan2(float y, float x); inline float tan(float x); inline float cos(float x); inline float sin(float x);
+inline void discard_fragment();
+struct access {}; enum class address { repeat, clamp_to_edge }; enum class filter { linear, nearest };
+struct sampler { constexpr sampler(address, filter) {} constexpr sampler(filter) {} };
+template <typename T> struct texture2d { float4 sample(sampler, float2) const; };
+}
+#define vertex
+#define fragment
+#define constant
+#define device

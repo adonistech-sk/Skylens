@@ -1,0 +1,55 @@
+{
+  "builtWith": "Tools/catalog-builder/build.mjs",
+  "counts": {
+    "stars": 118217,
+    "starsWithNames": 411,
+    "starsWithMetadata": 25793,
+    "constellations": 88,
+    "deepSky": 1643,
+    "messier": 110
+  },
+  "sources": [
+    {
+      "name": "Hipparcos Main Catalogue (ESA SP-1200)",
+      "use": "Star positions, magnitudes, colors, parallaxes, proper motions",
+      "url": "https://heasarc.gsfc.nasa.gov/W3Browse/all/hipparcos.html",
+      "file": "heasarc_hipparcos.tdat",
+      "sha256": "b216daf8004b80f4da0aaa61ca9c2b3d15d4a749f39922b99ccc4e40b4918371"
+    },
+    {
+      "name": "Yale Bright Star Catalogue, 5th Revised Ed.",
+      "use": "Bayer and Flamsteed designations, HR numbers, spectral types",
+      "url": "https://heasarc.gsfc.nasa.gov/W3Browse/star-catalog/bsc5p.html",
+      "file": "heasarc_bsc5p.tdat",
+      "sha256": "e2b2f8e9d615426f9478f88061235976143d49d8b25c6c15df3f3661c7095b53"
+    },
+    {
+      "name": "IAU Catalog of Star Names (WGSN)",
+      "use": "Proper star names",
+      "url": "https://www.iau.org/public/themes/naming_stars/",
+      "file": "IAU-CSN.txt",
+      "sha256": "84fac0c90f1b19abc491c2793469e0caa7b003ad1bc93a790ca41147010d0eb0"
+    },
+    {
+      "name": "NGC 2000.0 (Sinnott 1988)",
+      "use": "Deep-sky positions, types, magnitudes, sizes",
+      "url": "https://heasarc.gsfc.nasa.gov/W3Browse/all/ngc2000.html",
+      "file": "heasarc_ngc2000.tdat",
+      "sha256": "ba099b7e55f7f8b53c969422e85bbb4ed86500fd7c55a979a7300a4f63caecff"
+    },
+    {
+      "name": "Messier Nebulae and Star Clusters",
+      "use": "Messier positions, types, magnitudes",
+      "url": "https://heasarc.gsfc.nasa.gov/W3Browse/all/messier.html",
+      "file": "heasarc_messier.tdat",
+      "sha256": "1127c32408d74e8463e471e31debd56c3277a3667e1253f13b1187933bb7ca1c"
+    },
+    {
+      "name": "d3-celestial by Olaf Frohn (BSD-3-Clause)",
+      "use": "Constellation figures and IAU boundary polygons",
+      "url": "https://github.com/ofrohn/d3-celestial",
+      "file": "constellations.lines.json",
+      "sha256": "294f66bef5d5cf50b1e17f16d2efa1d97a15131612c68dd935adef6e7373e13c"
+    }
+  ]
+}

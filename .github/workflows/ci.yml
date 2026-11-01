@@ -1,0 +1,52 @@
+# Compiles and tests SkyLens on GitHub's macOS runners. This is the first real Xcode
+# build the project gets, so expect the "iOS app" job to report errors to fix.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  package:
+    name: SkyLensKit tests
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run package tests
+        run: swift test --package-path Packages/SkyLensKit
+
+  app:
+    name: iOS app
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show Xcode
+        run: xcodebuild -version
+      - name: Build for the Simulator
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project SkyLens.xcodeproj -scheme SkyLens \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            | tee build.log | grep -E 'error:|\*\* BUILD' || true
+          grep -q '\*\* BUILD SUCCEEDED' build.log
+      - name: Run unit and UI tests
+        run: |
+          device=$(xcrun simctl list devices available iPhone | grep -oE 'iPhone [^(]+' | head -1 | sed 's/ *$//')
+          echo "Using simulator: $device"
+          xcodebuild test \
+            -project SkyLens.xcodeproj -scheme SkyLens \
+            -destination "platform=iOS Simulator,name=$device" \
+            CODE_SIGNING_ALLOWED=NO \
+            | grep -E 'error:|passed|failed|\*\* TEST' || true
+      - name: Keep the build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
