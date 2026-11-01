@@ -9,7 +9,7 @@ import { directionOf } from '../../astronomy/locator';
 import { object, stars } from '../../data/catalog';
 import { DEMO_MODE } from '../../state/demo';
 import { getState, select, skyTime, useObserver, useStore } from '../../state/store';
-import { makeEffect, renderFrame, SkyResources } from './renderer';
+import { makeEffect, renderFrame, SELECTION_SETTLE, SkyResources } from './renderer';
 import { buildStarField, computeMoment, hitTest, SkyMoment, StarField, yearsSinceJ2000 } from './scene';
 
 export interface SkyHandle {
@@ -46,20 +46,21 @@ export function SkyView({
   orientationRef, projection = 'stereographic', fixedFov, overlayOnly = false, showCompass = true, bottomInset = 0, topInset = 0,
   initial, interactive = true, onTapObject, handleRef, onViewChange, hideGround = false, focusId,
 }: Props) {
-  const skyMap = useImage(require('../../../assets/sky/allsky.jpg'));
+  const skyMap = useImage(require('../../../assets/sky/milkyway.jpg'));
   const horizon = useImage(require('../../../assets/sky/horizon.png'));
   const sprite = useImage(require('../../../assets/sky/star-sprite.png'));
   const orionArt = useImage(require('../../../assets/sky/orion-art.jpg'));
   const labelFont = useFont(require('../../../assets/sky/Inter-Medium.ttf'), 13.5);
   const smallFont = useFont(require('../../../assets/sky/Inter-Medium.ttf'), 11);
-  const trackedFont = useFont(require('../../../assets/sky/Inter-Medium.ttf'), 13);
+  const trackedFont = useFont(require('../../../assets/sky/Inter-Medium.ttf'), 14);
+  const headingFont = useFont(require('../../../assets/sky/Inter-Medium.ttf'), 21);
   const resources = useMemo<SkyResources | null>(() => {
-    if (!skyMap || !horizon || !sprite || !labelFont || !smallFont || !trackedFont) return null;
+    if (!skyMap || !horizon || !sprite || !labelFont || !smallFont || !trackedFont || !headingFont) return null;
     return {
-      effect: makeEffect(), skyMap, horizon, sprite, labelFont, smallFont, trackedFont,
-      artwork: orionArt ? { image: orionArt, anchors: ORION_ANCHORS, opacity: 0.62 } : null,
+      effect: makeEffect(), skyMap, horizon, sprite, labelFont, smallFont, trackedFont, headingFont,
+      artwork: orionArt ? { image: orionArt, anchors: ORION_ANCHORS, opacity: 0.74 } : null,
     };
-  }, [skyMap, horizon, sprite, labelFont, smallFont, trackedFont, orionArt]);
+  }, [skyMap, horizon, sprite, labelFont, smallFont, trackedFont, headingFont, orionArt]);
   useEffect(() => { if (resources) sharedResources.current = resources; }, [resources]);
 
   const picture = useSharedValue<SkPicture>(emptyPicture());
@@ -72,13 +73,17 @@ export function SkyView({
   const fieldRef = useRef<StarField | null>(null);
   const momentRef = useRef<SkyMoment | null>(null);
   const selectionDir = useRef<Vec3 | null>(null);
-    const pending = useRef<number | null>(null);
+  const pending = useRef<number | null>(null);
+  const glide = useRef<{ vx: number; vy: number; last: number } | null>(null);
+  const selectedAt = useRef(0);
+  const selectedId = useRef<string | null>(null);
 
   const observer = useObserver();
   const layers = useStore((s) => s.layers);
   const selection = useStore((s) => s.selection);
   const focus = useStore((s) => s.focus);
   const nightVision = useStore((s) => s.nightVision);
+  const nightPreview = useStore((s) => s.nightPreview);
 
   useEffect(() => { AccessibilityInfo.isReduceMotionEnabled().then((v) => { reduceMotion.current = v; }).catch(() => {}); }, []);
 
@@ -116,16 +121,31 @@ export function SkyView({
       view.current = flight(f.from, f.to, f.duration, elapsed);
       if (elapsed >= f.duration) flightState.current = null;
     }
+    // Glide after a flick: the sky coasts to rest instead of stopping dead.
+    const g = glide.current;
+    if (g) {
+      const now = Date.now(), dt = Math.min(0.05, (now - g.last) / 1000);
+      g.last = now;
+      view.current = dragView(view.current, g.vx * dt, g.vy * dt, pointsPerDegree(camera()));
+      const decay = Math.exp(-dt * 5.2);
+      g.vx *= decay; g.vy *= decay;
+      if (Math.hypot(g.vx, g.vy) < 14) glide.current = null;
+    }
     const moment = currentMoment();
     const sel = getState().selection;
+    if (sel !== selectedId.current) { selectedId.current = sel; selectedAt.current = Date.now(); }
+    const selectionAge = (Date.now() - selectedAt.current) / 1000;
     const obj = sel ? object(sel) : null;
     selectionDir.current = obj ? directionOf(obj, new Date(moment.time), observer) : null;
     picture.value = renderFrame({
       camera: camera(), moment, field: fieldRef.current!, layers: hideGround ? { ...getState().layers, ground: false } : getState().layers, selection: focusId ? null : sel, selectionDir: focusId ? null : selectionDir.current,
-      moving: moving.current, overlayOnly, bottomInset, topInset, showCompass, nightVision: getState().nightVision,
+      moving: moving.current || !!glide.current, overlayOnly, bottomInset, topInset, showCompass, nightVision: getState().nightVision,
+      selectionAge: reduceMotion.current ? SELECTION_SETTLE : selectionAge, nightPreview: getState().nightPreview,
+      framing: !hideGround && !overlayOnly && showCompass && getState().layers.ground && getState().layers.framing,
     }, resources);
     onViewChange?.(view.current);
-    if (flightState.current || orientationRef) schedule();
+    const settling = !!sel && !reduceMotion.current && selectionAge < SELECTION_SETTLE;
+    if (flightState.current || orientationRef || glide.current || settling) schedule();
   };
 
   const latestDraw = useRef(draw);
@@ -144,7 +164,7 @@ export function SkyView({
     }, 250);
     return () => { clearInterval(id); if (pending.current !== null) cancelAnimationFrame(pending.current); pending.current = null; };
   }, []);
-  useEffect(() => { schedule(); }, [resources, layers, selection, nightVision, observer, layoutTick]);
+  useEffect(() => { schedule(); }, [resources, layers, selection, nightVision, nightPreview, observer, layoutTick]);
 
   // Fly to whatever was requested, from search, detail or Tonight.
   useEffect(() => {
@@ -175,31 +195,38 @@ export function SkyView({
 
   const start = useRef<ViewState>(view.current);
   const pan = Gesture.Pan().runOnJS(true).maxPointers(1).minDistance(3)
-    .onStart(() => { flightState.current = null; moving.current = true; start.current = view.current; })
+    .onStart(() => { flightState.current = null; glide.current = null; moving.current = true; start.current = view.current; })
     .onUpdate((e) => {
       const ppd = pointsPerDegree(camera());
       view.current = dragView(start.current, e.translationX, e.translationY, ppd);
       schedule();
     })
+    .onEnd((e) => {
+      if (!reduceMotion.current && Math.hypot(e.velocityX, e.velocityY) > 120) glide.current = { vx: e.velocityX, vy: e.velocityY, last: Date.now() };
+    })
     .onFinalize(() => { moving.current = false; schedule(); });
   const pinch = Gesture.Pinch().runOnJS(true)
-    .onStart(() => { flightState.current = null; moving.current = true; start.current = view.current; })
+    .onStart(() => { flightState.current = null; glide.current = null; moving.current = true; start.current = view.current; })
     .onUpdate((e) => {
       view.current = { ...view.current, fov: Math.min(FOV_RANGE[1], Math.max(FOV_RANGE[0], start.current.fov / e.scale)) };
       schedule();
     })
     .onFinalize(() => { moving.current = false; schedule(); });
-  const tap = Gesture.Tap().runOnJS(true).maxDistance(10).onEnd((e) => {
+  const tap = Gesture.Tap().runOnJS(true).maxDistance(10).onEnd((e, success) => {
+    if (!success) return;
     const hit = identify(e.x, e.y);
     select(hit?.id ?? null);
     onTapObject?.(hit?.id ?? null);
   });
-  const doubleTap = Gesture.Tap().runOnJS(true).numberOfTaps(2).onEnd(() => {
+  const doubleTap = Gesture.Tap().runOnJS(true).numberOfTaps(2).onEnd((_e, success) => {
+    if (!success) return;
     const from = view.current;
     flightState.current = { from, to: { ...from, fov: Math.max(FOV_RANGE[0], from.fov * 0.5) }, duration: reduceMotion.current ? 0 : 0.35, start: Date.now() };
     schedule();
   });
-  const gestures = Gesture.Exclusive(Gesture.Simultaneous(pan, pinch), doubleTap, tap);
+  // Taps run alongside the pan: a tap fails by itself once the finger moves 10pt, whereas
+  // an Exclusive with the pan first would leave the tap waiting on it.
+  const gestures = Gesture.Simultaneous(pan, pinch, Gesture.Exclusive(doubleTap, tap));
 
   const onLayout = (e: LayoutChangeEvent) => {
     size.current = { width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height };
@@ -207,12 +234,12 @@ export function SkyView({
   };
 
   const canvas = (
-    <Canvas style={{ flex: 1 }} testID="sky-canvas">
+    <Canvas style={{ flex: 1 }}>
       <Picture picture={picture} />
     </Canvas>
   );
   return (
-    <View style={{ flex: 1, backgroundColor: overlayOnly ? 'transparent' : '#050810' }} onLayout={onLayout}
+    <View testID="sky-canvas" style={{ flex: 1, backgroundColor: overlayOnly ? 'transparent' : '#050810' }} onLayout={onLayout}
       accessible accessibilityRole="image" accessibilityLabel="Star map. Drag to look around, pinch to zoom, tap a star to select it.">
       {interactive ? <GestureDetector gesture={gestures}>{canvas}</GestureDetector> : canvas}
     </View>
@@ -224,8 +251,8 @@ const orientationCentre = (v: ViewState): Vec3 => {
   return [Math.cos(h) * Math.cos(a), -Math.cos(h) * Math.sin(a), Math.sin(h)];
 };
 
-/** Pixels in assets/sky/orion-art.jpg pinned to the shoulders and leading knee. */
-const ORION_ANCHORS = { betelgeuse: [284, 375] as [number, number], bellatrix: [660, 387] as [number, number], rigel: [683, 978] as [number, number] };
+/** Pixels in assets/sky/orion-art.jpg pinned to the raised shoulder, far shoulder and knee. */
+const ORION_ANCHORS = { betelgeuse: [194, 522] as [number, number], bellatrix: [622, 656] as [number, number], rigel: [804, 1344] as [number, number] };
 
 let blank: SkPicture | null = null;
 /** A picture that draws nothing, for the frames before the sky is ready. */

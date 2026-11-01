@@ -45,7 +45,8 @@ export function EventThumb({ event }: { event: SkyEvent }) {
   }
   if (event.kind === 'moonPhase') {
     const p = moonPhase(event.date);
-    return <View style={[box, styles.bare]}><MoonDisc size={SIZE - 4} phaseAngle={p.phaseAngle} waxing={p.isWaxing} /></View>;
+    // A new Moon is black on black, so a fine limb shows where it is.
+    return <View style={[box, styles.bare]}><View style={p.illuminatedFraction < 0.04 ? styles.limb : undefined}><MoonDisc size={SIZE - 4} phaseAngle={p.phaseAngle} waxing={p.isWaxing} /></View></View>;
   }
   if (bodies.length) {
     const source = thumbFor(bodyObject(bodies[0]));
@@ -67,6 +68,7 @@ export function EventThumb({ event }: { event: SkyEvent }) {
 const styles = StyleSheet.create({
   box: { overflow: 'hidden', backgroundColor: '#0A0F1C', borderWidth: StyleSheet.hairlineWidth, borderColor: color.hairlineStrong },
   bare: { alignItems: 'center', justifyContent: 'center' },
+  limb: { borderRadius: SIZE, borderWidth: StyleSheet.hairlineWidth, borderColor: color.hairlineStrong },
   pair: { position: 'relative' },
   dot: { position: 'absolute', width: 32, height: 32, borderRadius: 16 },
 });

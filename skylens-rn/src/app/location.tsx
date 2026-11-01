@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconButton, PrimaryButton, SecondaryButton } from '../design/components';
 import { Icon } from '../design/Icon';
 import { images } from '../design/images';
+import { Reveal, Settle } from '../design/motion';
 import { color, font, type } from '../design/tokens';
 import { currentLocation } from '../features/location/currentLocation';
 import { leaveLocationFlow } from '../features/location/leave';
@@ -38,9 +39,8 @@ export default function LocationScreen() {
   return (
     <View style={styles.root}>
       <View style={styles.hero}>
-        <Image source={images.mountains} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition="bottom" />
-        <LinearGradient colors={['rgba(6,10,20,0.96)', 'rgba(6,10,20,0.5)', 'rgba(6,10,20,0)']} locations={[0, 0.3, 0.52]} style={StyleSheet.absoluteFill} />
-        <LinearGradient colors={['rgba(6,10,20,0)', color.base]} locations={[0.62, 0.95]} style={StyleSheet.absoluteFill} />
+        <Settle style={StyleSheet.absoluteFill} from={1.05} rise={10}><Image source={images.mountains} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition="top" /></Settle>
+        <LinearGradient colors={['rgba(6,10,20,0)', color.base]} locations={[0.56, 1]} style={StyleSheet.absoluteFill} />
       </View>
       {router.canGoBack() ? (
         <View style={{ position: 'absolute', top: insets.top + 12, left: 14 }}>
@@ -48,12 +48,14 @@ export default function LocationScreen() {
         </View>
       ) : null}
       <View style={[styles.content, { paddingBottom: Math.max(insets.bottom, 16) + 18 }]}>
-        <View style={styles.pin}>
+        <Reveal delay={160} style={styles.pin}>
           <Icon name="pin" size={28} tint={color.peachLight} weight={1.6} />
-        </View>
-        <Text style={[type.tracked, styles.tracked]}>Your location</Text>
-        <Text style={styles.title} accessibilityRole="header">Where are you stargazing?</Text>
-        <Text style={styles.body}>We&apos;ll use your location to show accurate sky, visibility, and events.</Text>
+        </Reveal>
+        <Reveal delay={260}>
+          <Text style={[type.tracked, styles.tracked]}>Your location</Text>
+          <Text style={styles.title} accessibilityRole="header">Where are you{'\n'}stargazing?</Text>
+          <Text style={styles.body}>We&apos;ll use your location to show{'\n'}accurate sky, visibility, and events.</Text>
+        </Reveal>
         {problem ? (
           <Pressable disabled={!problem.settings} onPress={() => Linking.openSettings()}>
             <Text style={styles.problem}>{problem.text}{problem.settings ? ' Open Settings' : ''}</Text>
@@ -70,12 +72,12 @@ export default function LocationScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: color.base },
-  hero: { position: 'absolute', top: 0, left: 0, right: 0, height: '56%' },
+  hero: { position: 'absolute', top: 0, left: 0, right: 0, height: '60%' },
   content: { flex: 1, justifyContent: 'flex-end', paddingHorizontal: 28 },
   pin: { alignSelf: 'center', width: 62, height: 62, borderRadius: 31, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: color.peachLine, backgroundColor: 'rgba(40,28,30,0.62)' },
   tracked: { textAlign: 'center', marginTop: 24, color: color.text },
-  title: { fontFamily: font.serif, fontSize: 38, lineHeight: 44, color: color.text, textAlign: 'center', marginTop: 12, letterSpacing: -0.5 },
-  body: { fontFamily: font.regular, fontSize: 16, lineHeight: 24, color: color.textSecondary, textAlign: 'center', marginTop: 14, paddingHorizontal: 8 },
+  title: { ...type.title, fontSize: 37, lineHeight: 42, textAlign: 'center', marginTop: 12 },
+  body: { ...type.body, fontSize: 15.5, lineHeight: 23, textAlign: 'center', marginTop: 14 },
   problem: { fontFamily: font.regular, fontSize: 13, lineHeight: 19, color: color.peach, textAlign: 'center', marginTop: 12 },
   actions: { gap: 14, marginTop: 28 },
 });

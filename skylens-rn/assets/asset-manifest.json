@@ -1,5 +1,19 @@
 [
   {
+    "key": "andromeda_noirlab",
+    "file": "noao-m31.jpg",
+    "title": "The Andromeda Galaxy",
+    "object": "M31 Andromeda Galaxy (with M32 and M110)",
+    "source_page_url": "https://noirlab.edu/public/images/noao-m31/",
+    "download_url": "https://noirlab.edu/public/media/archives/images/publicationjpg/noao-m31.jpg",
+    "author_credit": "T.A. Rector and B.A. Wolpa/NOIRLab/NSF/AURA",
+    "license": "CC BY 4.0 (NOIRLab website terms)",
+    "license_url": "https://noirlab.edu/public/copyright/",
+    "width": 3944,
+    "height": 4000,
+    "verification_note": "Viewed 2026-11-01: real true-colour Kitt Peak 0.9m mosaic from seven filters. NOIRLab copyright page read directly: CC BY 4.0 unless noted, credit must be clear and visible, no implied endorsement. Used in place of the Kevin M. Gill image. Rotated, never mirrored."
+  },
+  {
     "key": "andromeda",
     "file": "andromeda.png",
     "title": "Andromeda Galaxy - January 29 2024",

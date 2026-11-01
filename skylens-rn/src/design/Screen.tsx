@@ -6,6 +6,7 @@ import Svg, { Circle, Defs, Line, RadialGradient, Stop } from 'react-native-svg'
 import { constellation, SkyObject, starColor, stars } from '../data/catalog';
 import { TabBar } from './components';
 import { images, thumbFor } from './images';
+import { Reveal } from './motion';
 import { color, type } from './tokens';
 
 /** The near-black, faintly starred page used by the tab screens. */
@@ -17,7 +18,7 @@ export function Page({ title, right, children, tabs = true, scroll = true }: { t
         <Text style={type.title} accessibilityRole="header">{title}</Text>
         {right}
       </View>
-      {children}
+      <Reveal>{children}</Reveal>
     </>
   );
   return (

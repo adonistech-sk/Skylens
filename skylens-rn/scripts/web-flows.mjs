@@ -49,6 +49,69 @@ await flow('search Andromeda, open detail, Find in Sky selects it', async (p) =>
   await p.screenshot({ path: path.join(out, 'find-in-sky.png') });
 });
 
+const skyPixels = async (p) => (await id(p, 'sky-canvas').screenshot()).toString('base64');
+
+await flow('the sky pans with a drag and comes to rest', async (p) => {
+  await open(p, 'sky');
+  await visible(id(p, 'sky-more'));
+  await p.waitForTimeout(9000);
+  const before = await skyPixels(p);
+  await p.mouse.move(200, 420);
+  await p.mouse.down();
+  await p.mouse.move(120, 380, { steps: 8 });
+  await p.mouse.up();
+  await p.waitForTimeout(2500);
+  const after = await skyPixels(p);
+  if (before === after) throw new Error('the sky did not move');
+  await p.screenshot({ path: path.join(out, 'sky-panned.png') });
+});
+
+await flow('tapping a star selects it, and its card opens the detail page', async (p) => {
+  await open(p, 'sky');
+  await visible(id(p, 'sky-more'));
+  await p.waitForTimeout(9000);
+  await id(p, 'sky-canvas').click({ position: { x: 284, y: 493 } }); // Rigel in the demo view.
+  await visible(id(p, 'sky-selection'));
+  await visible(text(p, 'Rigel'));
+  await p.waitForTimeout(800);
+  await p.screenshot({ path: path.join(out, 'sky-selected-rigel.png') });
+  await id(p, 'sky-selection').click();
+  await visible(id(p, 'find-in-sky'));
+});
+
+await flow('the layer panel changes the sky, including the framing landscape', async (p) => {
+  await open(p, 'sky');
+  await visible(id(p, 'sky-more'));
+  await p.waitForTimeout(9000);
+  const before = await skyPixels(p);
+  await id(p, 'sky-layers').click();
+  await visible(text(p, 'Landscape framing (artistic)'));
+  await p.getByRole('switch', { name: 'Landscape framing (artistic)' }).click();
+  await p.getByRole('switch', { name: 'Orion artwork' }).click();
+  await id(p, 'sky-layers').click();
+  await p.waitForTimeout(2000);
+  if (before === await skyPixels(p)) throw new Error('layers did not change the sky');
+  await p.screenshot({ path: path.join(out, 'sky-layers-off.png') });
+});
+
+await flow('daytime sky offers a labelled night preview without moving the clock', async (p) => {
+  await open(p, 'time-travel');
+  await visible(id(p, 'tt-forward'));
+  for (let i = 0; i < 16; i++) await id(p, 'tt-forward').click();
+  await visible(text(p, '13:25'));
+  await id(p, 'tt-close').click();
+  await visible(id(p, 'sky-night-preview'), 30000);
+  await visible(text(p, 'Daytime sky'));
+  await p.waitForTimeout(3000);
+  await p.screenshot({ path: path.join(out, 'sky-daytime.png') });
+  await id(p, 'sky-night-preview').click();
+  await visible(text(p, 'Night preview'));
+  await p.waitForTimeout(3000);
+  await p.screenshot({ path: path.join(out, 'sky-night-preview.png') });
+  await id(p, 'sky-time').click();
+  await visible(text(p, '13:25'));
+});
+
 await flow('a typo still finds the star', async (p) => {
   await open(p, 'search');
   await id(p, 'search-input').fill('betelguese');
@@ -134,6 +197,22 @@ await flow('Calendar asks for Pro instead of faking access', async (p) => {
   await visible(id(p, 'events-calendar'));
   await id(p, 'events-calendar').click();
   await visible(text(p, 'Unlock the complete'));
+});
+
+await flow('the paywall is honest when no products load', async (p) => {
+  await open(p, 'pro');
+  await visible(text(p, "Subscriptions aren't available right now"));
+  if (await id(p, 'unlock-pro').isEnabled()) throw new Error('Unlock Pro should be disabled without a product');
+  await visible(text(p, 'Restore Purchases'));
+});
+
+await flow('Explore segments switch to real lists', async (p) => {
+  await open(p, 'explore');
+  await visible(id(p, 'featured-orion'));
+  await p.getByRole('tab', { name: 'Solar System' }).click();
+  await visible(id(p, 'solar-jupiter'));
+  await p.getByRole('tab', { name: 'Deep Sky' }).click();
+  await visible(text(p, 'All Messier objects'));
 });
 
 await browser.close();

@@ -29,8 +29,8 @@
         "expo-font",
         {
           "fonts": [
-            "./node_modules/@expo-google-fonts/newsreader/300Light/Newsreader_300Light.ttf",
-            "./node_modules/@expo-google-fonts/newsreader/300Light_Italic/Newsreader_300Light_Italic.ttf",
+            "./node_modules/@expo-google-fonts/newsreader/400Regular/Newsreader_400Regular.ttf",
+            "./node_modules/@expo-google-fonts/newsreader/400Regular_Italic/Newsreader_400Regular_Italic.ttf",
             "./node_modules/@expo-google-fonts/inter/400Regular/Inter_400Regular.ttf",
             "./node_modules/@expo-google-fonts/inter/500Medium/Inter_500Medium.ttf",
             "./node_modules/@expo-google-fonts/inter/600SemiBold/Inter_600SemiBold.ttf"
@@ -61,7 +61,7 @@
         "expo-camera",
         {
           "cameraPermission": "AR Sky shows the sky overlay on your live camera view. Nothing is recorded unless you press the shutter.",
-          "microphonePermission": false,
+          "microphonePermission": "SkyLens never records sound. iOS requires this text because the camera library includes audio support.",
           "recordAudioAndroid": false
         }
       ],

@@ -39,7 +39,7 @@ function sampleMap(m, lon, lat) {
 }
 
 /** Real stars: all 118,217 Hipparcos entries splatted over a crop of the NASA map. */
-function backdrop(W, H, centerRA, centerDec, spanDeg, gain) {
+function backdrop(W, H, centerRA, centerDec, spanDeg, gain, starLimit = 8) {
   const buf = new Float32Array(W * H * 3);
   const px = spanDeg / W;
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
@@ -59,13 +59,13 @@ function backdrop(W, H, centerRA, centerDec, spanDeg, gain) {
   for (let s = 0; s < n; s++) {
     const o = 8 + s * 28;
     const mag = bin.readInt16LE(o + 24) / 100;
-    if (mag > 8) break;
+    if (mag > starLimit) break;
     const ra = bin.readFloatLE(o + 4), dec = bin.readFloatLE(o + 8);
     let dra = ((centerRA - ra + 540) % 360) - 180;
     const x = W / 2 + dra / px, y = H / 2 + (centerDec - dec) / px;
     if (x < 2 || y < 2 || x > W - 3 || y > H - 3) continue;
     const size = Math.max(0.5, 1.5 - mag * 0.2);
-    const flux = Math.min(1, 0.04 + (8 - mag) * 0.1);
+    const flux = Math.min(1, 0.04 + (starLimit - mag) * 0.14);
     const r = Math.ceil(size * 2);
     for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
       const d = Math.hypot(dx, dy) / size;
@@ -81,17 +81,19 @@ function backdrop(W, H, centerRA, centerDec, spanDeg, gain) {
  * horizonY: where the limb's top sits. radius: Earth's apparent radius in pixels.
  * subLon/subLat: the point on Earth facing the viewer's lower screen.
  */
-function renderScene({ W, H, horizonY, radius, subLon, subLat, sunX, sunY, sunStrength, sunVec, ra, dec, span, gain, tilt, violet, file }) {
-  const bg = backdrop(W, H, ra, dec, span, gain);
+async function renderScene({ W, H, horizonY, radius, subLon, subLat, sunX, sunY, sunStrength, sunVec, ra, dec, span, gain, tilt, violet, file, daylight = 1, thinPx = 4.2, widePx = 34, rim = 1, bloom = 0.5, cityGain = 1, landGain = 1, sunwardGain = 1, starLimit = 8 }) {
+  const bg = backdrop(W, H, ra, dec, span, gain, starLimit);
   if (violet) {
     // The band leans violet like the reference, and fades behind the headline on the left.
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
       const i = (x + y * W) * 3;
-      const keep = Math.min(1, Math.max(0.1, (x / W) * 1.5 - 0.22)) * Math.min(1, (1500 - y) / 500);
-      const l = bg[i] * 0.3 + bg[i + 1] * 0.59 + bg[i + 2] * 0.11;
-      bg[i] = (l * 0.82 + bg[i] * 0.18) * keep;
-      bg[i + 1] = (l * 0.68 + bg[i + 1] * 0.12) * keep;
-      bg[i + 2] = (l * 1.3 + bg[i + 2] * 0.3) * keep;
+      // Dark behind the headline, and the band climbing the top right, as designed.
+      const keep = Math.min(1, Math.max(0.06, ((x / W) * 1.25 - 0.36) * 1.5)) * Math.min(1, Math.max(0, (1500 - y) / 700));
+      const raw = bg[i] * 0.3 + bg[i + 1] * 0.59 + bg[i + 2] * 0.11;
+      const l = Math.max(0, raw - 0.075) * 1.5;
+      bg[i] = (l * 0.82 + bg[i] * 0.05) * keep;
+      bg[i + 1] = (l * 0.56 + bg[i + 1] * 0.04) * keep;
+      bg[i + 2] = (l * 1.36 + bg[i + 2] * 0.1) * keep;
     }
   }
   const center = [W / 2 + (tilt ?? 0) * W, horizonY + radius];
@@ -115,11 +117,13 @@ function renderScene({ W, H, horizonY, radius, subLon, subLat, sunX, sunY, sunSt
       const lat = Math.asin(p[2]) / DEG, lon = Math.atan2(p[1], p[0]) / DEG;
       const n = sampleMap(night, lon, lat), d = sampleMap(day, lon, lat);
       const light = nx * sunDir[0] + ny * sunDir[1] + z * sunDir[2];
-      const dayAmt = Math.min(1, Math.max(0, light / 0.34));
+      const dayAmt = daylight * Math.min(1, Math.max(0, light / 0.34));
       const lum = (n[0] * 0.5 + n[1] * 0.5);
-      const city = Math.pow(Math.max(0, lum - 0.24), 1.15) * 4.2;
-      const cityC = [city * 1.3, city * 0.62, city * 0.2];
-      const land = [0.006 + n[2] * 0.012, 0.014 + n[2] * 0.03, 0.05 + n[2] * 0.12];
+      const city = Math.pow(Math.max(0, lum - 0.14), 1.1) * 3.6 * cityGain;
+      // Tone-mapped, so dense cities stay orange instead of clipping to yellow-white.
+      const glowing = 1 - Math.exp(-city * 1.5);
+      const cityC = [glowing * 1.16, glowing * 0.5, glowing * 0.13];
+      const land = [(0.006 + n[2] * 0.012) * landGain, (0.014 + n[2] * 0.03) * landGain, (0.05 + n[2] * 0.12) * landGain];
       col = [
         land[0] * (1 - dayAmt) + d[0] * dayAmt * 0.62 + cityC[0] * (1 - dayAmt),
         land[1] * (1 - dayAmt) + d[1] * dayAmt * 0.66 + cityC[1] * (1 - dayAmt),
@@ -134,9 +138,9 @@ function renderScene({ W, H, horizonY, radius, subLon, subLat, sunX, sunY, sunSt
     // The bright atmosphere rim, thin and strongest toward the Sun.
     const h = rr - 1;
     const angleToSun = (nx * sunDir[0] + ny * sunDir[1]) / Math.max(rr, 1e-5);
-    const sunward = Math.pow(Math.max(0, angleToSun * 0.5 + 0.5), 3);
-    const thin = Math.exp(-Math.abs(h) * radius / 4.2);
-    const wide = h > 0 ? Math.exp(-h * radius / 34) : 0;
+    const sunward = sunwardGain * Math.pow(Math.max(0, angleToSun * 0.5 + 0.5), 3);
+    const thin = rim * Math.exp(-Math.abs(h) * radius / thinPx);
+    const wide = rim * (h > 0 ? Math.exp(-h * radius / widePx) : 0);
     col[0] += thin * (0.26 + 1.1 * sunward) + wide * (0.05 + 0.44 * sunward);
     col[1] += thin * (0.54 + 0.72 * sunward) + wide * (0.13 + 0.18 * sunward);
     col[2] += thin * 1.15 + wide * (0.42 - 0.2 * sunward);
@@ -147,16 +151,21 @@ function renderScene({ W, H, horizonY, radius, subLon, subLat, sunX, sunY, sunSt
     col[0] += flare * 1.0 + hStretch; col[1] += flare * 0.54 + hStretch * 0.6; col[2] += flare * 0.24 + hStretch * 0.34;
     for (let k = 0; k < 3; k++) out[i + k] = Math.min(255, Math.pow(Math.max(0, col[k]), 0.86) * 255);
   }
-  return sharp(out, { raw: { width: W, height: H, channels: 3 } }).jpeg({ quality: 80, mozjpeg: true }).toFile(file);
+  // Lights and the limb bloom softly, as they do through a lens.
+  const base = await sharp(out, { raw: { width: W, height: H, channels: 3 } }).png().toBuffer();
+  const glow = await sharp(base).linear(1.5, -70).blur(12).png().toBuffer();
+  const faded = await sharp(glow).ensureAlpha(bloom).png().toBuffer();
+  return sharp(base).composite([{ input: faded, blend: 'screen' }]).jpeg({ quality: 82, mozjpeg: true }).toFile(file);
 }
 
 fs.mkdirSync('assets/images', { recursive: true });
-// Europe's night lights lit by a sunrise on the left limb.
+// Europe's night lights under a sunrise on the left limb, the Earth rising to the right.
 console.log(await renderScene({
-  W: 1179, H: 2556, horizonY: 1400, radius: 2300, subLon: 14, subLat: -24, sunX: 40, sunY: 1486, sunStrength: 1, sunVec: [-1, 0.2, -0.86],
-  ra: 268, dec: 14, span: 40, gain: 1.5, violet: true, file: 'assets/images/earth-onboarding.jpg',
+  W: 1179, H: 2556, horizonY: 1160, radius: 2600, tilt: 0.75, subLon: 40, subLat: 4, sunX: 30, sunY: 1600, sunStrength: 1.45, sunVec: [-1, 0.2, -0.86], daylight: 0,
+  ra: 281, dec: 2, span: 64, gain: 2.1, violet: true, thinPx: 5, widePx: 46, cityGain: 0.5, landGain: 1.25, sunwardGain: 0.8, starLimit: 6.6, bloom: 0.26, file: 'assets/images/earth-onboarding.jpg',
 }));
+// A whole curved dome under the sky: the radius comes from the design's own curvature.
 console.log(await renderScene({
-  W: 1179, H: 1500, horizonY: 780, radius: 1800, subLon: 24, subLat: -22, sunX: -220, sunY: 1050, sunStrength: 0, sunVec: [0, -1, -0.6],
-  ra: 190, dec: 30, span: 30, gain: 0.3, file: 'assets/images/earth-horizon.jpg',
+  W: 1179, H: 1500, horizonY: 860, radius: 950, subLon: 18, subLat: -8, sunX: -220, sunY: 1050, sunStrength: 0, sunVec: [0, 1, -0.9], daylight: 0,
+  ra: 190, dec: 30, span: 30, gain: 0.3, thinPx: 5.5, widePx: 62, rim: 1.2, cityGain: 2.3, landGain: 2.1, sunwardGain: 0.2, starLimit: 7, file: 'assets/images/earth-horizon.jpg',
 }));

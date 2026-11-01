@@ -5,7 +5,7 @@ import { eventsBetweenSync } from '../src/astronomy/events';
 import { directionOf, locate, observe } from '../src/astronomy/locator';
 import { darkInterval, nightContaining, startOfLocalDay, timeZoneOffset } from '../src/astronomy/night';
 import { planTonight } from '../src/astronomy/tonight';
-import { constellations, deepSky, object, starDirection, stars } from '../src/data/catalog';
+import { constellations, deepSky, object, starColor, starDirection, stars } from '../src/data/catalog';
 import { editDistance, normalize, search } from '../src/data/search';
 
 const bratislava: Observer = { latitude: 48.1486, longitude: 17.1077, elevation: 134 };
@@ -206,5 +206,22 @@ describe('events', () => {
   it('the Moon–planet scan agrees with a much finer scan', () => {
     const e = eventsBetweenSync(new Date('2027-03-01T00:00:00Z'), new Date('2027-05-01T00:00:00Z'), bratislava);
     for (const c of e.filter((x) => x.kind === 'conjunction')) expect(c.subtitle).toMatch(/apart/);
+  });
+});
+
+describe('the sky data behind the locked design', () => {
+  it('carries real faint stars down to magnitude 8', () => {
+    const t = stars();
+    expect(t.count).toBeGreaterThan(40000);
+    expect(t.mag[t.count - 1]).toBeLessThanOrEqual(8.01);
+  });
+
+  it('keeps every star of the Orion figure in the catalog with its true colour', () => {
+    const t = stars();
+    for (const hip of [27989, 25336, 26727, 26311, 25930, 25281, 24436, 27366]) expect(t.indexByHip.has(hip)).toBe(true);
+    const [r, , b] = starColor(t.bv[t.indexByHip.get(27989)!]);
+    const [r2, , b2] = starColor(t.bv[t.indexByHip.get(24436)!]);
+    expect(r).toBeGreaterThan(b); // Betelgeuse is orange.
+    expect(b2).toBeGreaterThanOrEqual(r2); // Rigel is blue-white.
   });
 });

@@ -1,0 +1,72 @@
+[
+  {
+    "name": "01_onboarding",
+    "distance": "8.8",
+    "top": "6.5",
+    "middle": "12.5",
+    "bottom": "7.3"
+  },
+  {
+    "name": "02_location",
+    "distance": "10.1",
+    "top": "11.8",
+    "middle": "7.0",
+    "bottom": "11.6"
+  },
+  {
+    "name": "03_sky_view",
+    "distance": "8.5",
+    "top": "8.3",
+    "middle": "10.1",
+    "bottom": "7.2"
+  },
+  {
+    "name": "04_object_detail_andromeda",
+    "distance": "6.3",
+    "top": "11.4",
+    "middle": "5.1",
+    "bottom": "2.4"
+  },
+  {
+    "name": "05_tonight",
+    "distance": "5.9",
+    "top": "7.2",
+    "middle": "6.9",
+    "bottom": "3.6"
+  },
+  {
+    "name": "06_explore",
+    "distance": "9.6",
+    "top": "12.0",
+    "middle": "10.9",
+    "bottom": "5.9"
+  },
+  {
+    "name": "07_time_travel",
+    "distance": "7.0",
+    "top": "7.6",
+    "middle": "9.0",
+    "bottom": "4.5"
+  },
+  {
+    "name": "08_ar_sky",
+    "distance": "13.7",
+    "top": "12.1",
+    "middle": "10.5",
+    "bottom": "18.7"
+  },
+  {
+    "name": "09_events",
+    "distance": "5.9",
+    "top": "4.9",
+    "middle": "7.1",
+    "bottom": "5.5"
+  },
+  {
+    "name": "10_pro_paywall",
+    "distance": "11.6",
+    "top": "10.4",
+    "middle": "6.5",
+    "bottom": "17.8"
+  }
+]

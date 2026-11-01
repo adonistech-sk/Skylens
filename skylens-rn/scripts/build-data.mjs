@@ -12,10 +12,12 @@ const n = bin.readUInt32LE(4);
 const RECORD = 28;
 const constellations = JSON.parse(fs.readFileSync(new URL('constellations.json', res), 'utf8'));
 const lineStars = new Set(constellations.flatMap((c) => c.lines.flat()));
-const MAG_LIMIT = 6.8;
+// Faint stars are for depth when zoomed in, so only those down to META_LIMIT carry names
+// and spectral data. The rest are positions and colours from the same catalog.
+const MAG_LIMIT = 8.0, META_LIMIT = 6.8;
 
 const rows = [];
-const seen = new Set();
+const seen = new Set(), described = new Set();
 for (let i = 0; i < n; i++) {
   const o = 8 + i * RECORD;
   const hip = bin.readUInt32LE(o);
@@ -23,6 +25,7 @@ for (let i = 0; i < n; i++) {
   if (mag > MAG_LIMIT && !lineStars.has(hip)) continue;
   rows.push(o);
   seen.add(hip);
+  if (mag <= META_LIMIT || lineStars.has(hip)) described.add(hip);
 }
 for (const h of lineStars) if (!seen.has(h)) throw new Error(`constellation star ${h} missing from stars.bin`);
 
@@ -35,7 +38,7 @@ fs.writeFileSync(new URL('stars.ts', out),
   `export const STARS_B64 = '${packed.toString('base64')}';\n`);
 
 const meta = fs.readFileSync(new URL('stars-meta.tsv', res), 'utf8').trim().split('\n').map((l) => l.split('\t'));
-const metaRows = meta.filter((f) => seen.has(Number(f[0])) || f[1]).map((f) => [Number(f[0]), f[1] || 0, f[2] || 0, f[3] || 0, f[4] ? Number(f[4]) : 0, f[5] ? Number(f[5]) : 0, f[6] || 0]);
+const metaRows = meta.filter((f) => described.has(Number(f[0])) || f[1]).map((f) => [Number(f[0]), f[1] || 0, f[2] || 0, f[3] || 0, f[4] ? Number(f[4]) : 0, f[5] ? Number(f[5]) : 0, f[6] || 0]);
 const deep = fs.readFileSync(new URL('deepsky.tsv', res), 'utf8').trim().split('\n').map((l) => l.split('\t')).map((f) => [
   f[0], f[1] ? Number(f[1]) : 0, f[2] || 0, f[3], Number(f[4]), Number(f[5]), f[6] ? Number(f[6]) : null, f[7] ? Number(f[7]) : null, f[8] ? Number(f[8]) : null,
 ]);

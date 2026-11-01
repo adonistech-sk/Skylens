@@ -1,9 +1,12 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, usePathname } from 'expo-router';
-import { ReactNode } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
 import { Icon, IconName } from './Icon';
+import { motion, Tap } from './motion';
 import { color, font, peachGradient, space, type } from './tokens';
 
 export const press = (pressed: boolean) => ({ opacity: pressed ? 0.72 : 1 });
@@ -12,8 +15,8 @@ export function PrimaryButton({ label, onPress, icon = 'arrowRight', leading, di
   label: string; onPress: () => void; icon?: IconName | null; leading?: IconName; disabled?: boolean; busy?: boolean; testID?: string;
 }) {
   return (
-    <Pressable testID={testID} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: !!disabled, busy: !!busy }}
-      disabled={disabled || busy} onPress={onPress} style={({ pressed }) => [styles.primaryWrap, press(pressed), disabled && { opacity: 0.45 }]}>
+    <Tap testID={testID} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: !!disabled, busy: !!busy }}
+      disabled={disabled || busy} onPress={onPress} style={[styles.primaryWrap, disabled && { opacity: 0.55 }]}>
       <LinearGradient colors={peachGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.primary}>
         {busy ? <ActivityIndicator color={color.peachInk} /> : (
           <>
@@ -23,16 +26,16 @@ export function PrimaryButton({ label, onPress, icon = 'arrowRight', leading, di
           </>
         )}
       </LinearGradient>
-    </Pressable>
+    </Tap>
   );
 }
 
 export function SecondaryButton({ label, onPress, leading, testID, style }: { label: string; onPress: () => void; leading?: IconName; testID?: string; style?: StyleProp<ViewStyle> }) {
   return (
-    <Pressable testID={testID} accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [styles.secondary, press(pressed), style]}>
+    <Tap testID={testID} accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={[styles.secondary, style]}>
       {leading ? <Icon name={leading} size={20} /> : null}
       <Text style={styles.secondaryLabel}>{label}</Text>
-    </Pressable>
+    </Tap>
   );
 }
 
@@ -40,21 +43,36 @@ export function IconButton({ name, label, onPress, size = 44, iconSize = 21, tin
   name: IconName; label: string; onPress: () => void; size?: number; iconSize?: number; tint?: string; active?: boolean; glass?: boolean; weight?: number; filled?: boolean; testID?: string; style?: StyleProp<ViewStyle>;
 }) {
   return (
-    <Pressable testID={testID} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected: !!active }} hitSlop={6} onPress={onPress}
-      style={({ pressed }) => [{ width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center' }, glass && styles.glass, active && styles.glassActive, press(pressed), style]}>
+    <Tap testID={testID} depth={0.92} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected: !!active }} hitSlop={6} onPress={onPress}
+      style={[{ width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center' }, glass && styles.glass, active && styles.glassActive, style]}>
       <Icon name={name} size={iconSize} tint={active ? color.peach : tint} weight={weight} filled={filled} />
-    </Pressable>
+    </Tap>
   );
 }
 
 export function SegmentedControl<T extends string>({ options, value, onChange, style, solid }: { options: { value: T; label: string }[]; value: T; onChange: (v: T) => void; style?: StyleProp<ViewStyle>; solid?: boolean }) {
+  const [width, setWidth] = useState(0);
+  const reduced = useReducedMotion();
+  const index = Math.max(0, options.findIndex((o) => o.value === value));
+  const segment = (width - 4) / options.length;
+  const x = useSharedValue(0);
+  // The selection slides between segments rather than jumping.
+  useEffect(() => {
+    const to = index * segment;
+    x.value = reduced || !width ? to : withTiming(to, { duration: motion.base, easing: motion.ease });
+  }, [index, segment, reduced, width, x]);
+  const pill = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));
   return (
-    <View style={[styles.segments, style]} accessibilityRole="tablist">
+    <View style={[styles.segments, style]} accessibilityRole="tablist" onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+      {width ? (
+        <Animated.View pointerEvents="none" style={[styles.segmentPill, { width: segment }, !solid && styles.segmentOn, pill]}>
+          {solid ? <LinearGradient colors={peachGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: 19 }]} /> : null}
+        </Animated.View>
+      ) : null}
       {options.map((o) => {
         const selected = o.value === value;
         return (
-          <Pressable key={o.value} accessibilityRole="tab" accessibilityLabel={o.label} accessibilityState={{ selected }} onPress={() => onChange(o.value)} style={[styles.segment, selected && !solid && styles.segmentOn]}>
-            {selected && solid ? <LinearGradient colors={peachGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: 19 }]} /> : null}
+          <Pressable key={o.value} accessibilityRole="tab" accessibilityLabel={o.label} accessibilityState={{ selected }} onPress={() => onChange(o.value)} style={styles.segment}>
             <Text style={[styles.segmentLabel, selected && styles.segmentLabelOn, selected && solid && { color: color.peachInk, fontFamily: font.semibold }]} numberOfLines={1}>{o.label}</Text>
           </Pressable>
         );
@@ -97,7 +115,13 @@ export function TabBar({ floating }: { floating?: boolean }) {
         return (
           <Pressable key={t.href} testID={`tab-${t.label}`} accessibilityRole="tab" accessibilityLabel={t.label} accessibilityState={{ selected }}
             onPress={() => { if (!selected || floating) router.replace(t.href as never); }} style={styles.tab}>
-            <Icon name={t.icon} size={23} tint={selected ? color.peach : color.textSecondary} weight={1.35} />
+            {selected ? (
+              <Svg width={72} height={46} style={styles.tabGlow} pointerEvents="none">
+                <Defs><RadialGradient id="tabGlow"><Stop offset="0" stopColor={color.peach} stopOpacity={0.26} /><Stop offset="1" stopColor={color.peach} stopOpacity={0} /></RadialGradient></Defs>
+                <Ellipse cx={36} cy={22} rx={36} ry={23} fill="url(#tabGlow)" />
+              </Svg>
+            ) : null}
+            <Icon name={t.icon} size={25} tint={selected ? color.peach : color.textSecondary} weight={1.35} />
             <Text style={[styles.tabLabel, selected && { color: color.peach, fontFamily: font.semibold }]}>{t.label}</Text>
           </Pressable>
         );
@@ -118,7 +142,7 @@ export function Notice({ text, tone = 'quiet' }: { text: string; tone?: 'quiet' 
 const styles = StyleSheet.create({
   primaryWrap: { borderRadius: 30, shadowColor: color.peach, shadowOpacity: 0.22, shadowRadius: 18, shadowOffset: { width: 0, height: 6 } },
   primary: { height: 58, borderRadius: 29, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
-  primaryLabel: { fontFamily: font.semibold, fontSize: 17, color: color.peachInk },
+  primaryLabel: { ...type.button, fontSize: 17, color: color.peachInk },
   leading: { marginRight: 12 },
   trailing: { position: 'absolute', right: 24 },
   secondary: { height: 54, borderRadius: 27, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, borderWidth: 1, borderColor: color.hairlineStrong, backgroundColor: 'rgba(11,16,32,0.5)', paddingHorizontal: 20 },
@@ -126,7 +150,8 @@ const styles = StyleSheet.create({
   glass: { backgroundColor: 'rgba(14,19,32,0.62)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.18)' },
   glassActive: { borderColor: color.peachLine, borderWidth: 1, backgroundColor: 'rgba(30,22,24,0.72)' },
   segments: { flexDirection: 'row', height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.055)', padding: 2 },
-  segment: { flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 19, borderWidth: 1, borderColor: 'transparent' },
+  segment: { flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 19 },
+  segmentPill: { position: 'absolute', top: 2, bottom: 2, left: 2, borderRadius: 19, borderWidth: 1, borderColor: 'transparent' },
   segmentOn: { backgroundColor: color.peachFill, borderColor: color.peachLine },
   segmentLabel: { fontFamily: font.medium, fontSize: 14, color: color.textSecondary },
   segmentLabelOn: { color: color.text },
@@ -137,7 +162,8 @@ const styles = StyleSheet.create({
   rowSubtitle: { fontFamily: font.regular, fontSize: 13, lineHeight: 18, color: color.textSecondary, marginTop: 2, fontVariant: ['tabular-nums'] },
   tabBar: { flexDirection: 'row', paddingTop: 10, backgroundColor: 'rgba(11,15,25,0.92)', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.hairline, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
   tabBarFloating: { position: 'absolute', left: 0, right: 0, bottom: 0 },
-  tab: { flex: 1, alignItems: 'center', gap: 4, minHeight: 48 },
-  tabLabel: { fontFamily: font.medium, fontSize: 11, color: color.textSecondary },
+  tab: { flex: 1, alignItems: 'center', gap: 4, minHeight: 50 },
+  tabGlow: { position: 'absolute', top: -8, alignSelf: 'center' },
+  tabLabel: { fontFamily: font.medium, fontSize: 11.5, color: color.textSecondary },
   notice: { flexDirection: 'row', gap: space.sm, alignItems: 'flex-start', paddingVertical: space.sm },
 });

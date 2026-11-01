@@ -17,7 +17,21 @@ export interface OrionArtwork {
 
 const HIP = { betelgeuse: 27989, bellatrix: 25336, rigel: 24436 };
 
-export function computeArtworkAnchors(canvas: SkCanvas, art: OrionArtwork, camera: Camera, cam: Mat3, field: StarField) {
+/**
+ * The body of the figure. With the artwork on, Orion's club and shield lines are hidden,
+ * because they would run off across the illustration's raised arm and pelt. Turning the
+ * artwork off restores the full catalog figure.
+ */
+export const ORION_BODY_HIP = new Set([27989, 25336, 26727, 26311, 25930, 25281, 24436, 27366]);
+
+/** The artwork fades out where it would either swamp or lose the real sky. */
+export function artworkFade(fov: number): number {
+  const zoomedOut = Math.min(1, Math.max(0, (92 - fov) / 22));
+  const zoomedIn = Math.min(1, Math.max(0, (fov - 7) / 5));
+  return zoomedOut * zoomedIn;
+}
+
+export function drawArtwork(canvas: SkCanvas, art: OrionArtwork, camera: Camera, cam: Mat3, field: StarField, strength: number) {
   const t = stars();
   const scale = cameraScale(camera);
   const screen = (hip: number): [number, number] | null => {
@@ -42,7 +56,7 @@ export function computeArtworkAnchors(canvas: SkCanvas, art: OrionArtwork, camer
   const tx = a[0] - m00 * ax - m01 * ay;
   const ty = a[1] - m10 * ax - m11 * ay;
   const paint = Skia.Paint();
-  paint.setAlphaf(art.opacity);
+  paint.setAlphaf(art.opacity * strength);
   paint.setBlendMode(BlendMode.Plus);
   canvas.save();
   canvas.concat(Skia.Matrix([m00, m01, tx, m10, m11, ty, 0, 0, 1]));

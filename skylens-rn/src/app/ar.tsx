@@ -35,7 +35,7 @@ export default function ARSky() {
   const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
   const camera = useRef<CameraView | null>(null);
-  const orientation = useRef<Mat3 | null>(DEMO_MODE ? orientationFor(180, 40) : null);
+  const orientation = useRef<Mat3 | null>(DEMO_MODE ? orientationFor(163.5, 38) : null);
   const [size, setSize] = useState({ width: 393, height: 852 });
   const [noSensors, setNoSensors] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -130,7 +130,7 @@ const styles = StyleSheet.create({
   modeOnText: { fontFamily: font.semibold, fontSize: 14, color: color.peachInk },
   modeOff: { paddingHorizontal: 20, paddingVertical: 9 },
   modeOffText: { fontFamily: font.medium, fontSize: 14, color: color.text },
-  guide: { position: 'absolute', left: '17%', right: '17%', top: '30%', bottom: '32%' },
+  guide: { position: 'absolute', left: '15%', right: '15%', top: '27%', bottom: '31%' },
   standIn: { position: 'absolute', alignSelf: 'center', fontFamily: font.regular, fontSize: 10.5, color: 'rgba(255,255,255,0.6)' },
   notice: { position: 'absolute', left: 30, right: 30, textAlign: 'center', fontFamily: font.medium, fontSize: 13, lineHeight: 18, color: color.text, backgroundColor: 'rgba(11,15,27,0.78)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 14, overflow: 'hidden' },
   align: { position: 'absolute', left: 18, right: 18, padding: 16, borderRadius: 18, backgroundColor: 'rgba(11,15,27,0.92)' },

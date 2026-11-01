@@ -2,10 +2,10 @@
 export interface Credit { used: string; credit: string; license: string; edits?: string }
 
 export const CREDITS: Credit[] = [
-  { used: 'Star map background', credit: 'NASA/Goddard Space Flight Center Scientific Visualization Studio. Gaia DR2: ESA/Gaia/DPAC.', license: 'NASA Deep Star Maps 2020', edits: 'Toned and colour graded' },
+  { used: 'Milky Way in the star map', credit: 'NASA/Goddard Space Flight Center Scientific Visualization Studio. Gaia DR2: ESA/Gaia/DPAC.', license: 'NASA Deep Star Maps 2020', edits: 'Point stars filtered out, brightness kept, colour is an artistic grade' },
   { used: 'Earth scenes', credit: 'Synthesized for SkyLens from NASA data. Night lights: NASA Earth Observatory images by Joshua Stevens, using Suomi NPP VIIRS data from Miguel Román, NASA GSFC. Blue Marble: NASA Earth Observatory.', license: 'Public domain data', edits: 'Rendered scene, not a photograph' },
-  { used: 'Andromeda Galaxy', credit: '“Andromeda Galaxy - January 29 2024” by Kevin M. Gill, licensed under CC BY 2.0', license: 'CC BY 2.0', edits: 'Cropped and colour graded' },
-  { used: 'Orion Nebula', credit: 'NASA, ESA, M. Robberto (Space Telescope Science Institute/ESA) and the Hubble Space Telescope Orion Treasury Project Team', license: 'CC BY 4.0', edits: 'Cropped, colour adjusted' },
+  { used: 'Andromeda Galaxy', credit: 'T.A. Rector and B.A. Wolpa/NOIRLab/NSF/AURA', license: 'CC BY 4.0', edits: 'Rotated, cropped, sky darkened, overexposed core toned down, colour strengthened' },
+  { used: 'Orion Nebula', credit: 'NASA, ESA, M. Robberto (Space Telescope Science Institute/ESA) and the Hubble Space Telescope Orion Treasury Project Team', license: 'CC BY 4.0', edits: 'Cropped, colour strengthened, edges darkened' },
   { used: 'Pleiades', credit: 'NOIRLab/NSF/AURA/T.A. Rector (University of Alaska Anchorage), R. Cool (University of Arizona) and WIYN', license: 'CC BY 4.0', edits: 'Resized and cropped' },
   { used: 'Lagoon Nebula', credit: 'ESO', license: 'CC BY 4.0', edits: 'Resized and cropped' },
   { used: 'Whirlpool Galaxy', credit: 'NASA, ESA, S. Beckwith (STScI), and The Hubble Heritage Team (STScI/AURA)', license: 'CC BY 4.0', edits: 'Resized and cropped' },
@@ -17,8 +17,9 @@ export const CREDITS: Credit[] = [
   { used: 'Mercury', credit: 'NASA/JPL, Mariner 10', license: 'Public domain' },
   { used: 'Uranus', credit: 'NASA/JPL-Caltech, Voyager 2', license: 'Public domain' },
   { used: 'Neptune', credit: 'NASA/JPL, Voyager 2 (enhanced colour)', license: 'Public domain' },
-  { used: 'Mountains on the Location screen', credit: 'NPS Photo/A. Falgoust', license: 'Public domain', edits: 'Cropped and colour graded' },
-  { used: 'Orion artwork', credit: 'Original illustration made for SkyLens with AI image generation. It is decoration pinned to the real stars and is not a source of any position.', license: 'Project artwork' },
+  { used: 'Mountains on the Location screen', credit: 'Illustration made for SkyLens with AI image generation. Not a real place.', license: 'Project artwork' },
+  { used: 'Orion artwork', credit: 'Illustration made for SkyLens with AI image generation. It is decoration pinned to the real stars and is not a source of any position.', license: 'Project artwork' },
+  { used: 'Landscape in the sky view', credit: 'Original procedural artwork. It frames the screen and is not your real horizon, which is drawn from true altitude.', license: 'Project artwork' },
 ];
 
 export const DATA_SOURCES = [

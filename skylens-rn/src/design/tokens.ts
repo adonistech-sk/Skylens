@@ -21,8 +21,8 @@ export const color = {
 } as const;
 
 export const font = {
-  serif: 'Newsreader_300Light',
-  serifItalic: 'Newsreader_300Light_Italic',
+  serif: 'Newsreader_400Regular',
+  serifItalic: 'Newsreader_400Regular_Italic',
   regular: 'Inter_400Regular',
   medium: 'Inter_500Medium',
   semibold: 'Inter_600SemiBold',
@@ -30,15 +30,28 @@ export const font = {
 
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const;
 
+/**
+ * The locked type system. Serif for anything that names a thing; Inter for everything
+ * that reports or operates. Sizes were matched against the design at 393pt wide.
+ */
 export const type = {
-  display: { fontFamily: font.serif, fontSize: 50, lineHeight: 54, color: color.text, letterSpacing: -0.5 },
-  title: { fontFamily: font.serif, fontSize: 38, lineHeight: 44, color: color.text, letterSpacing: -0.4 },
+  /** Display heading on the welcome screen. */
+  display: { fontFamily: font.serif, fontSize: 50, lineHeight: 54, color: color.text, letterSpacing: -0.6 },
+  /** Page titles: Tonight, Explore, Events. */
+  title: { fontFamily: font.serif, fontSize: 36, lineHeight: 42, color: color.text, letterSpacing: -0.4 },
+  /** Object names on a detail page. */
+  objectTitle: { fontFamily: font.serif, fontSize: 44, lineHeight: 48, color: color.text, letterSpacing: -0.6 },
+  /** Section headings inside a page. */
   heading: { fontFamily: font.serif, fontSize: 24, lineHeight: 30, color: color.text, letterSpacing: -0.2 },
   body: { fontFamily: font.regular, fontSize: 15, lineHeight: 22, color: color.textSecondary },
   bodyStrong: { fontFamily: font.medium, fontSize: 15, lineHeight: 21, color: color.text },
+  /** Metadata under a title. */
   caption: { fontFamily: font.regular, fontSize: 13, lineHeight: 18, color: color.textSecondary },
   micro: { fontFamily: font.medium, fontSize: 11, lineHeight: 14, color: color.textSecondary },
   tracked: { fontFamily: font.medium, fontSize: 11, lineHeight: 14, color: color.textSecondary, letterSpacing: 3.6, textTransform: 'uppercase' as const },
+  /** Button labels. */
+  button: { fontFamily: font.semibold, fontSize: 16, color: color.text },
+  /** Technical measurements: tabular, so values don't shift as they change. */
   data: { fontFamily: font.medium, fontSize: 14, lineHeight: 18, color: color.text, fontVariant: ['tabular-nums' as const] },
 } as const;
 

@@ -51,9 +51,9 @@ export default function Tonight() {
         <>
           <View style={styles.moonRow}>
             <View style={styles.moonStage}>
-              <MoonDisc size={196} phaseAngle={plan.moon.phaseAngle} waxing={plan.moon.isWaxing} />
-              <Svg width={250} height={236} style={StyleSheet.absoluteFill}>
-                <Path d={arcPath(106, 118, 112, -62, 62)} stroke={color.peach} strokeWidth={2.5} strokeLinecap="round" fill="none" opacity={0.9} />
+              <MoonDisc size={176} phaseAngle={plan.moon.phaseAngle} waxing={plan.moon.isWaxing} />
+              <Svg width={232} height={214} style={StyleSheet.absoluteFill}>
+                <Path d={arcPath(88, 107, 103, -58, 58)} stroke={color.peach} strokeWidth={2} strokeLinecap="round" fill="none" opacity={0.86} />
               </Svg>
             </View>
             <View style={styles.moonCopy}>
@@ -88,13 +88,13 @@ export default function Tonight() {
 
 const styles = StyleSheet.create({
   subtitle: { ...type.caption, fontSize: 15, paddingHorizontal: 22, marginTop: -6 },
-  moonRow: { flexDirection: 'row', alignItems: 'center', paddingLeft: 22, marginTop: 14 },
-  moonStage: { width: 232, height: 236, justifyContent: 'center' },
+  moonRow: { flexDirection: 'row', alignItems: 'center', paddingLeft: 26, marginTop: 10 },
+  moonStage: { width: 218, height: 214, justifyContent: 'center' },
   moonCopy: { flex: 1, paddingLeft: 6, paddingRight: 8 },
   phase: { fontFamily: font.regular, fontSize: 18, lineHeight: 24, color: color.peach },
   percent: { fontFamily: font.regular, fontSize: 18, lineHeight: 26, color: color.peach, marginTop: 2, fontVariant: ['tabular-nums'] },
   illuminated: { fontFamily: font.regular, fontSize: 16, lineHeight: 22, color: color.text },
-  times: { flexDirection: 'row', paddingHorizontal: 22, marginTop: 10 },
+  times: { flexDirection: 'row', paddingHorizontal: 22, marginTop: 8 },
   time: { flex: 1, alignItems: 'center', gap: 3 },
   timeLabel: { fontFamily: font.regular, fontSize: 13, color: color.textSecondary, marginTop: 4 },
   timeValue: { fontFamily: font.medium, fontSize: 15, color: color.text, fontVariant: ['tabular-nums'] },

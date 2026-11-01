@@ -20,6 +20,8 @@ export interface Layers {
   milkyWay: boolean;
   artwork: boolean;
   ground: boolean;
+  /** The artistic landscape along the bottom of the sky view. Not the true horizon. */
+  framing: boolean;
 }
 
 export interface Persisted {
@@ -48,10 +50,12 @@ interface State extends Persisted {
   clock: Clock;
   selection: string | null;
   focus: FocusRequest | null;
+  /** Shows the stars in daylight, labelled on screen. It never changes the clock. */
+  nightPreview: boolean;
 }
 
 const KEY = 'skylens.user.v1';
-export const DEFAULT_LAYERS: Layers = { constellations: true, labels: true, deepSky: true, planets: true, milkyWay: true, artwork: true, ground: true };
+export const DEFAULT_LAYERS: Layers = { constellations: true, labels: true, deepSky: true, planets: true, milkyWay: true, artwork: true, ground: true, framing: true };
 
 const initial: State = {
   hydrated: false,
@@ -65,6 +69,7 @@ const initial: State = {
   clock: { anchorSky: null, anchorReal: 0, rate: 1 },
   selection: null,
   focus: null,
+  nightPreview: false,
 };
 
 let state = initial;
@@ -114,6 +119,7 @@ export const setLocation = (location: SavedLocation) => set({ location }, true);
 export const setLayer = (key: keyof Layers, value: boolean) => set({ layers: { ...state.layers, [key]: value } }, true);
 export const setUse24h = (use24h: boolean) => set({ use24h }, true);
 export const setNightVision = (nightVision: boolean) => set({ nightVision }, true);
+export const setNightPreview = (nightPreview: boolean) => set({ nightPreview });
 export const setProActive = (proActive: boolean) => set({ proActive });
 export const select = (selection: string | null) => set({ selection });
 

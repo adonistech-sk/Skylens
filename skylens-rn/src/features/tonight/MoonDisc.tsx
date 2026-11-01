@@ -21,9 +21,10 @@ half4 main(float2 p) {
   float a = phase * 0.0174533;
   float3 sun = float3(sin(a), 0.0, -cos(a));
   float light = dot(float3(q, z), sun);
-  float lit = smoothstep(-0.10, 0.30, light);
+  float lit = smoothstep(-0.12, 0.36, light);
   half4 c = moon.eval(p);
-  float earthshine = 0.035;
+  c.rgb *= 0.88;
+  float earthshine = 0.085;
   float edge = smoothstep(1.0, 0.985, sqrt(r2));
   return half4(c.rgb * (earthshine + (1.0 - earthshine) * lit) * edge, edge);
 }`;

@@ -2,13 +2,14 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BodyId, compass16 } from '../../astronomy/core';
 import { observe } from '../../astronomy/locator';
 import { bodyEditorial, bodyIdOf, constellationMeaning, constellationName, describeObject, distanceLightYears, object, objectNote, SkyObject, TYPE_NAMES } from '../../data/catalog';
-import { IconButton, press, SegmentedControl } from '../../design/components';
+import { IconButton, SegmentedControl } from '../../design/components';
 import { Icon, IconName } from '../../design/Icon';
+import { Pop, Reveal, Tap } from '../../design/motion';
 import { heroFor } from '../../design/images';
 import { color, font, type } from '../../design/tokens';
 import { SkyView } from '../../features/sky/SkyView';
@@ -88,11 +89,11 @@ export default function ObjectDetail() {
         <LinearGradient pointerEvents="none" colors={['rgba(6,10,20,0.35)', 'rgba(6,10,20,0)', color.base]} locations={[0, 0.3, 1]} style={StyleSheet.absoluteFill} />
       </View>
       <ScrollView contentContainerStyle={{ paddingTop: 262, paddingBottom: 128 + insets.bottom }} showsVerticalScrollIndicator={false}>
-        <View style={styles.titleBlock}>
+        <Reveal style={styles.titleBlock}>
           {designation ? <View style={styles.pill}><Text style={styles.pillText}>{designation}</Text></View> : null}
           <Text style={styles.title} accessibilityRole="header">{o.name}</Text>
           <Text style={styles.subtitle}>{kindLine(o)}{distance ? ` · ${distance}` : ''}</Text>
-        </View>
+        </Reveal>
         <SegmentedControl solid style={styles.segments} value={tab} onChange={setTab}
           options={[{ value: 'overview', label: 'Overview' }, { value: 'observing', label: 'Observing' }, { value: 'details', label: 'Details' }]} />
         {tab === 'overview' ? (
@@ -133,17 +134,17 @@ export default function ObjectDetail() {
       </ScrollView>
 
       <View style={[styles.topBar, { top: insets.top + 8 }]} pointerEvents="box-none">
-        <IconButton name="back" label="Back" glass={false} onPress={() => router.back()} iconSize={24} />
+        <IconButton name="back" label="Back" glass={false} onPress={() => (router.canGoBack() ? router.back() : router.replace('/sky'))} iconSize={24} />
         <View style={{ flex: 1 }} />
-        <IconButton testID="detail-favorite" name="heart" label={favorite ? 'Remove from favorites' : 'Add to favorites'} glass={false} active={favorite} filled={favorite} iconSize={25} onPress={() => toggleFavorite(o.id)} />
-        <IconButton name="share" label="Share" glass={false} onPress={share} iconSize={25} />
+        <Pop active={favorite}><IconButton testID="detail-favorite" name="heart" label={favorite ? 'Remove from favorites' : 'Add to favorites'} glass={false} active={favorite} filled={favorite} iconSize={27} onPress={() => toggleFavorite(o.id)} /></Pop>
+        <IconButton name="share" label="Share" glass={false} onPress={share} iconSize={27} />
       </View>
       <View style={[styles.actions, { paddingBottom: Math.max(insets.bottom, 14) + 8 }]}>
-        <Pressable testID="find-in-sky" disabled={cannotFind} accessibilityRole="button" accessibilityLabel="Find in Sky" onPress={find} style={({ pressed }) => [styles.find, press(pressed)]}>
+        <Tap testID="find-in-sky" disabled={cannotFind} accessibilityRole="button" accessibilityLabel="Find in Sky" onPress={find} style={styles.find}>
           <Icon name="target" size={23} />
           <Text style={styles.findText}>Find in Sky</Text>
-        </Pressable>
-        <IconButton testID="detail-star" name="star" label={favorite ? 'Remove from favorites' : 'Add to favorites'} size={56} iconSize={25} tint={color.peach} active filled={favorite} onPress={() => toggleFavorite(o.id)} />
+        </Tap>
+        <Pop active={favorite}><IconButton testID="detail-star" name="star" label={favorite ? 'Remove from favorites' : 'Add to favorites'} size={56} iconSize={25} tint={color.peach} active filled={favorite} onPress={() => toggleFavorite(o.id)} /></Pop>
       </View>
     </View>
   );
@@ -155,11 +156,11 @@ const styles = StyleSheet.create({
   titleBlock: { paddingHorizontal: 26 },
   pill: { alignSelf: 'flex-start', paddingHorizontal: 11, paddingVertical: 3, borderRadius: 11, borderWidth: 1, borderColor: color.peachLine, marginBottom: 8, backgroundColor: 'rgba(14,19,32,0.4)' },
   pillText: { fontFamily: font.medium, fontSize: 12, color: color.text },
-  title: { fontFamily: font.serif, fontSize: 46, lineHeight: 50, color: color.text, letterSpacing: -0.7 },
+  title: type.objectTitle,
   subtitle: { ...type.body, color: color.text, marginTop: 8, fontSize: 15 },
   segments: { marginHorizontal: 22, marginTop: 16 },
   section: { paddingHorizontal: 26, marginTop: 16 },
-  copy: { fontFamily: font.regular, fontSize: 16, lineHeight: 24, color: color.text },
+  copy: { fontFamily: font.regular, fontSize: 15, lineHeight: 22, color: color.text },
   cells: { flexDirection: 'row', marginTop: 16 },
   cell: { flex: 1, alignItems: 'center', gap: 4, paddingVertical: 2, paddingHorizontal: 4 },
   cellLine: { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: color.hairlineStrong },
@@ -169,7 +170,7 @@ const styles = StyleSheet.create({
   factLabel: { fontFamily: font.regular, fontSize: 14, color: color.textSecondary, flexShrink: 1 },
   factValue: { fontFamily: font.medium, fontSize: 14, color: color.text, flexShrink: 1, textAlign: 'right', fontVariant: ['tabular-nums'] },
   topBar: { position: 'absolute', left: 12, right: 12, flexDirection: 'row', alignItems: 'center', gap: 4 },
-  actions: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 22, paddingTop: 10, backgroundColor: 'rgba(6,10,20,0.88)' },
+  actions: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 22, paddingTop: 10, backgroundColor: 'rgba(6,10,20,0.97)' },
   find: { flex: 1, height: 56, borderRadius: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, borderWidth: 1, borderColor: color.hairlineStrong, backgroundColor: 'rgba(17,26,48,0.72)' },
   findText: { fontFamily: font.medium, fontSize: 17, color: color.text },
 });

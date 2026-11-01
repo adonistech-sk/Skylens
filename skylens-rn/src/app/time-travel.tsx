@@ -9,6 +9,7 @@ import { BodyId, bodyName, normalize180, position } from '../astronomy/core';
 import { startOfLocalDay } from '../astronomy/night';
 import { IconButton, press } from '../design/components';
 import { Icon } from '../design/Icon';
+import { Tap } from '../design/motion';
 import { images } from '../design/images';
 import { color, font, type } from '../design/tokens';
 import { formatLongDate, formatTime } from '../state/format';
@@ -16,31 +17,38 @@ import { isLive, MAX_DATE, MIN_DATE, resetToNow, setRate, setSkyTime, shiftSkyTi
 
 const SPEEDS = [10, 100, 1000, 10000];
 const HOUR = 3_600_000, DAY = 86_400_000;
+// Earth in assets/images/earth-horizon.jpg, in points at 393pt wide. The arcs share its
+// centre, so they read as orbits around the planet.
+const EARTH_CENTRE_Y = 603, EARTH_ART_WIDTH = 393, EARTH_ART_HEIGHT = 500;
 const ARC_BODIES: { id: BodyId; radius: number; dot: number; tint: string }[] = [
-  { id: 'sun', radius: 216, dot: 7, tint: '#FFB36B' },
-  { id: 'moon', radius: 170, dot: 5, tint: '#F1EEE7' },
-  { id: 'venus', radius: 138, dot: 3.2, tint: '#FFE9C8' },
-  { id: 'mars', radius: 112, dot: 3.2, tint: '#FF9A6B' },
-  { id: 'jupiter', radius: 92, dot: 3.6, tint: '#FFDDB5' },
-  { id: 'saturn', radius: 72, dot: 3, tint: '#F5DCA8' },
+  { id: 'sun', radius: 478, dot: 7, tint: '#FFA861' },
+  { id: 'moon', radius: 446, dot: 5, tint: '#F1EEE7' },
+  { id: 'venus', radius: 416, dot: 3, tint: '#FFE9C8' },
+  { id: 'mars', radius: 416, dot: 3, tint: '#FF9A6B' },
+  { id: 'jupiter', radius: 382, dot: 3.4, tint: '#FFDDB5' },
+  { id: 'saturn', radius: 382, dot: 2.8, tint: '#F5DCA8' },
 ];
+const ORBITS = [478, 446, 416, 382, 352];
 
 /** The sky as a dome above the observer's horizon: each body sits at its true azimuth, and vanishes when it sets. */
 function Dome({ time, width }: { time: number; width: number }) {
   const observer = useObserver();
-  const cx = width / 2, cy = 268;
+  // The Earth art scales with the screen width, so the orbits must too.
+  const k = width / EARTH_ART_WIDTH;
+  const cx = width / 2, cy = EARTH_CENTRE_Y * k;
   const bodies = useMemo(() => ARC_BODIES.map((b) => {
     const p = position(b.id, new Date(time), observer).apparent;
-    const theta = (normalize180(p.azimuth - 180) * Math.PI) / 180 * 0.82;
-    return { ...b, up: p.altitude > 0, x: cx + Math.sin(theta) * b.radius * 1.42, y: cy - Math.cos(theta) * b.radius * 1.15 };
-  }), [time, observer.latitude, observer.longitude, cx]);
+    // True azimuth, compressed to span the arc: due south is the top of the dome.
+    const theta = (normalize180(p.azimuth - 180) * Math.PI) / 180 * 0.21;
+    return { ...b, up: p.altitude > 0, x: cx + Math.sin(theta) * b.radius * k, y: cy - Math.cos(theta) * b.radius * k };
+  }), [time, observer.latitude, observer.longitude, cx, cy, k]);
   return (
-    <Svg width={width} height={320} style={StyleSheet.absoluteFill}>
+    <Svg width={width} height={320 * k} style={StyleSheet.absoluteFill}>
       <Defs>
         <RadialGradient id="glow"><Stop offset="0" stopColor="#FFB36B" stopOpacity={0.85} /><Stop offset="1" stopColor="#FFB36B" stopOpacity={0} /></RadialGradient>
       </Defs>
-      {ARC_BODIES.map((b) => (
-        <Path key={b.id} d={`M ${cx - b.radius * 1.42 * 0.98} ${cy} A ${b.radius * 1.42} ${b.radius * 1.15} 0 0 1 ${cx + b.radius * 1.42 * 0.98} ${cy}`} stroke="rgba(190,205,235,0.20)" strokeWidth={0.8} fill="none" />
+      {ORBITS.map((r) => (
+        <Circle key={r} cx={cx} cy={cy} r={r * k} stroke="rgba(190,205,235,0.20)" strokeWidth={0.8} fill="none" />
       ))}
       {bodies.filter((b) => b.up).map((b) => (
         <Circle key={`g${b.id}`} cx={b.x} cy={b.y} r={b.dot * 3.4} fill="url(#glow)" />
@@ -49,7 +57,7 @@ function Dome({ time, width }: { time: number; width: number }) {
         <Circle key={b.id} cx={b.x} cy={b.y} r={b.dot} fill={b.tint} />
       ))}
       {bodies.filter((b) => b.up).map((b) => (
-        <SvgText key={`t${b.id}`} x={b.x} y={b.y - b.dot - 6} fontSize={11} fill="rgba(245,242,240,0.8)" textAnchor="middle" fontFamily={font.medium}>{bodyName(b.id)}</SvgText>
+        <SvgText key={`t${b.id}`} x={b.x} y={b.y - b.dot - 6} fontSize={10.5} fill="rgba(245,242,240,0.62)" textAnchor="middle" fontFamily={font.medium}>{bodyName(b.id)}</SvgText>
       ))}
     </Svg>
   );
@@ -71,15 +79,17 @@ function Ruler({ time, tz, width }: { time: number; tz: string; width: number })
       <Svg width={width} height={46} pointerEvents="none">
         <Defs><RadialGradient id="mark"><Stop offset="0" stopColor={color.peachLight} stopOpacity={0.95} /><Stop offset="1" stopColor={color.peach} stopOpacity={0} /></RadialGradient></Defs>
         <Line x1={inset} x2={width - inset} y1={23} y2={23} stroke="rgba(255,255,255,0.28)" strokeWidth={0.8} />
-        {Array.from({ length: 97 }, (_, i) => {
-          const px = inset + (i / 96) * (width - inset * 2);
-          const major = i % 8 === 0, mid = i % 4 === 0;
-          const h = major ? 8 : mid ? 5.5 : 3;
-          return <Line key={i} x1={px} x2={px} y1={23 - h} y2={23 + h} stroke="rgba(255,255,255,0.5)" strokeWidth={0.7} />;
+        {Array.from({ length: 49 }, (_, i) => {
+          const px = inset + (i / 48) * (width - inset * 2);
+          const major = i % 12 === 0, mid = i % 6 === 0, minor = i % 2 === 0;
+          const h = major ? 11 : mid ? 8 : minor ? 5.5 : 3.5;
+          const warm = Math.abs(px - x) < 62;
+          return <Line key={i} x1={px} x2={px} y1={23 - h} y2={23 + h} stroke={warm ? 'rgba(255,190,150,0.7)' : 'rgba(255,255,255,0.46)'} strokeWidth={0.8} />;
         })}
-        <Circle cx={x} cy={23} r={18} fill="url(#mark)" />
-        <Line x1={x} x2={x} y1={7} y2={39} stroke={color.peachLight} strokeWidth={1.4} />
-        <Circle cx={x} cy={23} r={3.2} fill="#FFF3E6" />
+        <Circle cx={x} cy={23} r={22} fill="url(#mark)" />
+        <Line x1={x} x2={x} y1={1} y2={45} stroke={color.peachLight} strokeWidth={1.3} />
+        <Line x1={x - 13} x2={x + 13} y1={23} y2={23} stroke={color.peachLight} strokeWidth={1.1} />
+        <Circle cx={x} cy={23} r={3} fill="#FFF3E6" />
       </Svg>
     </View>
   );
@@ -122,13 +132,13 @@ export default function TimeTravel() {
 
   return (
     <View style={styles.root} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
-      <Image source={images.earthHorizon} style={[StyleSheet.absoluteFill, { height: '74%' }]} contentFit="cover" contentPosition="top" />
-      <LinearGradient colors={['rgba(6,10,20,0)', color.base]} locations={[0.56, 0.74]} style={StyleSheet.absoluteFill} pointerEvents="none" />
+      <Image source={images.earthHorizon} style={{ position: 'absolute', top: 0, left: 0, width, height: (width * EARTH_ART_HEIGHT) / EARTH_ART_WIDTH }} contentFit="fill" />
+      <LinearGradient colors={['rgba(6,10,20,0)', color.base]} locations={[0.43, 0.585]} style={StyleSheet.absoluteFill} pointerEvents="none" />
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <IconButton testID="tt-close" name="close" label="Close Time Travel" glass={false} iconSize={25} onPress={() => router.back()} />
+        <IconButton testID="tt-close" name="close" label="Close Time Travel" glass={false} iconSize={25} onPress={() => (router.canGoBack() ? router.back() : router.replace('/sky'))} />
         <Text style={styles.title} accessibilityRole="header">Time Travel</Text>
       </View>
-      <View style={[styles.dome, { top: insets.top + 56 }]} pointerEvents="none"><Dome time={time} width={width} /></View>
+      <View style={styles.dome} pointerEvents="none"><Dome time={time} width={width} /></View>
 
       <View style={[styles.panel, { paddingBottom: Math.max(insets.bottom, 14) + 12 }]}>
         <View style={styles.dateRow}>
@@ -145,11 +155,11 @@ export default function TimeTravel() {
         ) : null}
         <Ruler time={time} tz={tz} width={width - 44} />
         <View style={styles.controls}>
-          <IconButton name="skipBack" label="Back one day" glass={false} iconSize={25} onPress={() => shiftSkyTime(-DAY)} />
+          <IconButton name="rewind" label="Back one day" glass={false} iconSize={25} onPress={() => shiftSkyTime(-DAY)} />
           <IconButton testID="tt-back" name="rewind" label="Back one hour" glass={false} iconSize={25} onPress={() => shiftSkyTime(-HOUR)} />
-          <Pressable testID="tt-play" accessibilityRole="button" accessibilityLabel={playing ? 'Pause' : 'Play'} onPress={togglePlay} style={({ pressed }) => [styles.play, press(pressed)]}>
-            <Icon name={playing ? 'pause' : 'play'} size={30} tint={color.peachLight} filled={!playing} weight={2.2} />
-          </Pressable>
+          <Tap testID="tt-play" depth={0.93} accessibilityRole="button" accessibilityLabel={playing ? 'Pause' : 'Play'} onPress={togglePlay} style={styles.play}>
+            <Icon name={playing ? 'pause' : 'play'} size={28} tint={color.peachLight} filled={!playing} weight={2.2} />
+          </Tap>
           <IconButton testID="tt-forward" name="forward" label="Forward one hour" glass={false} iconSize={25} onPress={() => shiftSkyTime(HOUR)} />
           <Pressable testID="tt-speed" accessibilityRole="button" accessibilityLabel={`Speed ${SPEEDS[speed]} times. Change speed.`} onPress={cycleSpeed} style={({ pressed }) => [styles.speed, press(pressed)]}>
             <Text style={styles.speedText} numberOfLines={1} adjustsFontSizeToFit>{SPEEDS[speed].toLocaleString('en-US')}×</Text>
@@ -167,16 +177,16 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: color.base },
   header: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12 },
   title: { ...type.heading, fontSize: 28 },
-  dome: { position: 'absolute', left: 0, right: 0, height: 320 },
+  dome: { position: 'absolute', top: 0, left: 0, right: 0, height: 320 },
   panel: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 22 },
-  dateRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  dateText: { flex: 1, fontFamily: font.medium, fontSize: 17, color: color.text, fontVariant: ['tabular-nums'] },
+  dateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12 },
+  dateText: { fontFamily: font.medium, fontSize: 17, color: color.text, fontVariant: ['tabular-nums'], marginRight: 10 },
   timeText: { fontFamily: font.medium, fontSize: 18, color: color.text, fontVariant: ['tabular-nums'] },
   steppers: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 },
   step: { paddingHorizontal: 9, paddingVertical: 8, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.07)' },
   stepText: { fontFamily: font.medium, fontSize: 12, color: color.text },
   controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16, paddingHorizontal: 4 },
-  play: { width: 76, height: 76, borderRadius: 38, alignItems: 'center', justifyContent: 'center', borderWidth: 1.6, borderColor: color.peach, backgroundColor: 'rgba(40,24,20,0.5)', shadowColor: color.peach, shadowOpacity: 0.45, shadowRadius: 12, shadowOffset: { width: 0, height: 0 } },
+  play: { width: 68, height: 68, borderRadius: 34, alignItems: 'center', justifyContent: 'center', borderWidth: 1.6, borderColor: color.peach, backgroundColor: 'rgba(40,24,20,0.5)', shadowColor: color.peach, shadowOpacity: 0.45, shadowRadius: 12, shadowOffset: { width: 0, height: 0 } },
   speed: { width: 50, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5, backgroundColor: 'rgba(255,255,255,0.08)' },
   speedText: { fontFamily: font.medium, fontSize: 13, color: color.text, fontVariant: ['tabular-nums'] },
   now: { alignSelf: 'center', marginTop: 20, width: 210, height: 54, borderRadius: 27, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: color.hairlineStrong, backgroundColor: 'rgba(17,26,48,0.72)' },

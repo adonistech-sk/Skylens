@@ -14,7 +14,7 @@ export async function renderCaptureOverlay(orientation: Mat3, fov: number, size:
     camera: { orientation, fov, width: size.width, height: size.height, projection: 'rectilinear' },
     moment: computeMoment(time, location), field: buildStarField(stars(), yearsSinceJ2000(time)),
     layers: { ...layers, ground: false }, selection: null, selectionDir: null, moving: false, overlayOnly: true,
-    bottomInset: 0, topInset: 0, showCompass: false, nightVision: false,
+    bottomInset: 0, topInset: 0, showCompass: false, nightVision: false, selectionAge: 1, nightPreview: false, framing: false,
   }, resources);
 }
 

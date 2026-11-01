@@ -5,6 +5,7 @@ import { SkyEvent } from '../astronomy/events';
 import { timeZoneOffset } from '../astronomy/night';
 import { IconButton, Notice, press, SegmentedControl } from '../design/components';
 import { Icon } from '../design/Icon';
+import { Reveal } from '../design/motion';
 import { Page } from '../design/Screen';
 import { color, font, type } from '../design/tokens';
 import { EventThumb } from '../features/events/EventThumb';
@@ -95,13 +96,13 @@ export default function Events() {
   const choose = (m: 'upcoming' | 'calendar') => { if (m === 'calendar' && !proActive) router.push('/pro'); else setMode(m); };
   const { events, failed } = useEvents(skyTime(), 120);
   const upcoming = useMemo(() => (events ?? [])
-    .filter((e) => e.date.getTime() >= skyTime() - DAY && (e.isSignificant || e.kind === 'meteorShower' || (e.kind === 'conjunction' && !e.bodies.includes('moon'))) && e.visibility.kind !== 'notVisible')
+    .filter((e) => e.title !== 'New Moon' && e.date.getTime() >= skyTime() - DAY && (e.isSignificant || e.kind === 'meteorShower' || (e.kind === 'conjunction' && !e.bodies.includes('moon'))) && e.visibility.kind !== 'notVisible')
     .slice(0, 16), [events]);
 
   return (
     <Page title="Events" right={<IconButton testID="events-calendar" name="calendar" label="Show calendar" glass={false} iconSize={26} active={mode === 'calendar'} onPress={() => choose(mode === 'calendar' ? 'upcoming' : 'calendar')} />}>
       <SegmentedControl style={styles.segments} value={mode} onChange={choose} options={[{ value: 'upcoming', label: 'Upcoming' }, { value: 'calendar', label: 'Calendar' }]} />
-      {mode === 'calendar' ? <Calendar tz={observer.timeZone} /> : failed ? <View style={styles.list}><Notice tone="warn" text="Events couldn't be calculated for this date." /></View> : !events ? (
+      {mode === 'calendar' ? <Reveal key="calendar" fade><Calendar tz={observer.timeZone} /></Reveal> : failed ? <View style={styles.list}><Notice tone="warn" text="Events couldn't be calculated for this date." /></View> : !events ? (
         <View style={styles.loading}><ActivityIndicator color={color.peach} /><Text style={[type.caption, { marginTop: 10 }]}>Calculating from the ephemeris</Text></View>
       ) : (
         <View style={styles.list}>
@@ -117,7 +118,7 @@ const styles = StyleSheet.create({
   segments: { marginHorizontal: 22, marginTop: 4 },
   loading: { alignItems: 'center', marginTop: 90 },
   list: { paddingHorizontal: 22, marginTop: 14 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12, minHeight: 92 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, minHeight: 100 },
   rowLine: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: color.hairlineStrong },
   date: { width: 42, alignItems: 'center' },
   day: { fontFamily: font.serif, fontSize: 32, lineHeight: 35, color: color.textSecondary, fontVariant: ['tabular-nums'] },
