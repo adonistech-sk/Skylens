@@ -397,7 +397,7 @@ public struct PresentationDetent: Hashable, Sendable {
     public static func height(_ h: CGFloat) -> PresentationDetent { PresentationDetent() }
 }
 public struct PresentationBackgroundInteraction: Sendable {
-    public static func enabled(upTo: PresentationDetent) -> PresentationBackgroundInteraction { PresentationBackgroundInteraction() }
+    public static func enabled(upThrough: PresentationDetent) -> PresentationBackgroundInteraction { PresentationBackgroundInteraction() }
 }
 public protocol ListStyle {}
 public struct PlainListStyle: ListStyle {}

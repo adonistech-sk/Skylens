@@ -124,7 +124,7 @@ Guided Tours · Solar System 3D Explorer · Astrophotography Assistant · AI Ass
 | Item | Why |
 |---|---|
 | Xcode build, then fix what it finds | Nothing has compiled against the real SDK |
-| Apple Developer team and bundle ID | Signing. `com.skylens.app` is a placeholder |
+| Apple Developer team and bundle ID | Signing. `sk.skylens.app` is registered to the team |
 | Real contact in `AppLinks.userAgent` | MET Norway's terms require one |
 | Hosted privacy policy, set in `AppLinks.privacyPolicy` | App Store requirement. The link stays hidden until then |
 | App Store Connect subscription products | IDs must match `StoreService` |

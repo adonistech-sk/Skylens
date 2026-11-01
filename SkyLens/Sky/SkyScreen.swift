@@ -144,11 +144,11 @@ struct SkyScreen: View {
         case .time:
             TimeTravelPanel()
                 .presentationDetents([.height(360), .large])
-                .presentationBackgroundInteraction(.enabled(upTo: .height(360)))
+                .presentationBackgroundInteraction(.enabled(upThrough: .height(360)))
         case .appearance:
             AppearancePanel(onUpgrade: upgrade)
                 .presentationDetents([.medium, .large])
-                .presentationBackgroundInteraction(.enabled(upTo: .medium))
+                .presentationBackgroundInteraction(.enabled(upThrough: .medium))
         case .detail(let id):
             NavigationStack {
                 ObjectDetailView(id: id, onFind: open)
