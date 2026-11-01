@@ -128,7 +128,10 @@ export function SkyView({
     if (flightState.current || orientationRef) schedule();
   };
 
-  const schedule = () => { if (pending.current === null) pending.current = requestAnimationFrame(draw); };
+  const latestDraw = useRef(draw);
+  latestDraw.current = draw;
+  // Runs the newest closure, so a frame queued before the textures loaded still draws.
+  const schedule = () => { if (pending.current === null) pending.current = requestAnimationFrame(() => latestDraw.current()); };
   const drawRef = useRef(schedule);
   drawRef.current = schedule;
 

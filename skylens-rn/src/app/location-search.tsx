@@ -1,5 +1,5 @@
 import { getCalendars } from 'expo-localization';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,11 +8,13 @@ import { Icon } from '../design/Icon';
 import { color, font, type } from '../design/tokens';
 import { normalize } from '../data/search';
 import { CITIES, City } from '../features/location/cities';
+import { leaveLocationFlow } from '../features/location/leave';
 import { completeOnboarding, setLocation, useStore } from '../state/store';
 
 export default function LocationSearch() {
   const insets = useSafeAreaInsets();
   const onboarded = useStore((s) => s.onboarded);
+  const first = useLocalSearchParams<{ first?: string }>().first === '1' || !onboarded;
   const [query, setQuery] = useState('');
   const [lat, setLat] = useState('');
   const [lon, setLon] = useState('');
@@ -24,7 +26,7 @@ export default function LocationSearch() {
 
   const finish = () => {
     completeOnboarding();
-    if (onboarded) { router.back(); if (router.canGoBack()) router.back(); } else router.replace('/sky');
+    leaveLocationFlow(first);
   };
   const pick = (c: City) => {
     setLocation({ name: c.name, latitude: c.lat, longitude: c.lon, elevation: c.m, timeZone: c.tz, source: 'manual' });

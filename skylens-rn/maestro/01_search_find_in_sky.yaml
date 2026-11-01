@@ -30,5 +30,5 @@ appId: sk.skylens.app
     visible:
       id: sky-selection
     timeout: 10000
-- assertVisible: Andromeda Galaxy
+- assertVisible: ".*Andromeda Galaxy.*"
 - takeScreenshot: flow_find_in_sky

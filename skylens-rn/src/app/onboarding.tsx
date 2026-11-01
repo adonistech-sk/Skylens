@@ -25,7 +25,7 @@ export default function Onboarding() {
         <Text style={styles.body}>A modern guide to the night sky, stars, planets, and beyond.</Text>
       </View>
       <View style={[styles.cta, { bottom: Math.max(insets.bottom, 18) + 22 }]}>
-        <PrimaryButton testID="get-started" label="Get Started" onPress={() => router.push('/location')} />
+        <PrimaryButton testID="get-started" label="Get Started" onPress={() => router.push('/location?first=1')} />
       </View>
     </View>
   );

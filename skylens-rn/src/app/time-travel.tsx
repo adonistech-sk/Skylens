@@ -28,7 +28,7 @@ const ARC_BODIES: { id: BodyId; radius: number; dot: number; tint: string }[] = 
 /** The sky as a dome above the observer's horizon: each body sits at its true azimuth, and vanishes when it sets. */
 function Dome({ time, width }: { time: number; width: number }) {
   const observer = useObserver();
-  const cx = width / 2, cy = 300;
+  const cx = width / 2, cy = 268;
   const bodies = useMemo(() => ARC_BODIES.map((b) => {
     const p = position(b.id, new Date(time), observer).apparent;
     const theta = (normalize180(p.azimuth - 180) * Math.PI) / 180 * 0.82;

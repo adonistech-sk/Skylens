@@ -50,5 +50,5 @@ appId: sk.skylens.app
     env:
       LINK: skylens://favorites
 - extendedWaitUntil:
-    visible: Orion Nebula
+    visible: "Orion Nebula.*"
     timeout: 10000

@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,11 +9,13 @@ import { Icon } from '../design/Icon';
 import { images } from '../design/images';
 import { color, font, type } from '../design/tokens';
 import { currentLocation } from '../features/location/currentLocation';
+import { leaveLocationFlow } from '../features/location/leave';
 import { completeOnboarding, setLocation, useStore } from '../state/store';
 
 export default function LocationScreen() {
   const insets = useSafeAreaInsets();
   const onboarded = useStore((s) => s.onboarded);
+  const first = useLocalSearchParams<{ first?: string }>().first === '1' || !onboarded;
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<{ text: string; settings?: boolean } | null>(null);
 
@@ -25,7 +27,7 @@ export default function LocationScreen() {
     if (result.kind === 'ok') {
       setLocation(result.location);
       completeOnboarding();
-      if (onboarded && router.canGoBack()) router.back(); else router.replace('/sky');
+      leaveLocationFlow(first);
     } else if (result.kind === 'denied') {
       setProblem({ text: 'Location access is off. Choose a place manually, or allow it in Settings.', settings: !result.canAskAgain });
     } else {
@@ -59,7 +61,7 @@ export default function LocationScreen() {
         ) : null}
         <View style={styles.actions}>
           <PrimaryButton testID="use-current" label="Use Current Location" leading="navigate" icon={null} busy={busy} onPress={useCurrent} />
-          <SecondaryButton testID="choose-manually" label="Choose Manually" leading="search" onPress={() => router.push('/location-search')} />
+          <SecondaryButton testID="choose-manually" label="Choose Manually" leading="search" onPress={() => router.push(first ? '/location-search?first=1' : '/location-search')} />
         </View>
       </View>
     </View>
