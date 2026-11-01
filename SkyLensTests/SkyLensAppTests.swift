@@ -1,5 +1,6 @@
 import AstronomyCore
 import Metal
+import simd
 import SkyProjection
 import Testing
 @testable import SkyLens

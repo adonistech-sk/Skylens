@@ -42,11 +42,24 @@ jobs:
           xcodebuild test \
             -project SkyLens.xcodeproj -scheme SkyLens \
             -destination "platform=iOS Simulator,name=$device" \
+            -resultBundlePath TestResults.xcresult \
             CODE_SIGNING_ALLOWED=NO \
-            | grep -E 'error:|passed|failed|\*\* TEST' || true
-      - name: Keep the build log
+            > test.log 2>&1 || true
+          grep -E 'error:|Test case .*(passed|failed)|\*\* TEST' test.log || true
+          grep -q '\*\* TEST SUCCEEDED' test.log
+      - name: Screenshot the app in the Simulator
+        if: always()
+        run: |
+          booted=$(xcrun simctl list devices booted | grep -oE '[0-9A-F-]{36}' | head -1)
+          if [ -n "$booted" ]; then xcrun simctl io "$booted" screenshot simulator.png || true; fi
+      - name: Keep the logs
+        if: always()
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: build-log
-          path: build.log
+          path: |
+            build.log
+            test.log
+            simulator.png
+          if-no-files-found: ignore
