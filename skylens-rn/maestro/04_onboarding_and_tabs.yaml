@@ -28,16 +28,17 @@ appId: sk.skylens.app
     id: sky-more
 - tapOn:
     id: tab-Tonight
-- assertVisible: Tonight
+- assertVisible: "Tonight.*"
 - tapOn:
     id: tab-Explore
 - assertVisible: "The Orion Nebula.*"
 - tapOn:
     id: tab-Events
-- assertVisible: Upcoming
+- assertVisible: "Upcoming.*"
 - tapOn:
     id: tab-More
-- assertVisible: SkyLens Pro
+- assertVisible:
+    id: more-pro
 - tapOn:
     id: tab-Sky
 - extendedWaitUntil:
