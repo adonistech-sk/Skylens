@@ -1,0 +1,42 @@
+# Choosing another place changes Tonight, and a favorite appears in More.
+appId: sk.skylens.app
+---
+- launchApp
+- openLink: skylens://tonight
+- extendedWaitUntil:
+    visible: ".*Bratislava"
+    timeout: 20000
+- extendedWaitUntil:
+    visible: "Best to See Tonight"
+    timeout: 20000
+- takeScreenshot: flow_tonight_bratislava
+- tapOn:
+    id: tab-More
+- tapOn:
+    id: more-location
+- tapOn:
+    id: choose-manually
+- tapOn:
+    id: city-input
+- inputText: Sydney
+- tapOn:
+    id: city-Sydney
+- openLink: skylens://tonight
+- extendedWaitUntil:
+    visible: ".*Sydney"
+    timeout: 20000
+- extendedWaitUntil:
+    visible: "Best to See Tonight"
+    timeout: 20000
+- takeScreenshot: flow_tonight_sydney
+- openLink: skylens://object/dso%3AM42
+- extendedWaitUntil:
+    visible:
+      id: detail-star
+    timeout: 15000
+- tapOn:
+    id: detail-star
+- openLink: skylens://favorites
+- extendedWaitUntil:
+    visible: Orion Nebula
+    timeout: 10000

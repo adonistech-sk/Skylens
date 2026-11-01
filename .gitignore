@@ -8,3 +8,4 @@ AuthKey_*.p8
 DerivedData/
 node_modules/
 xcuserdata/
+SKYLENS_REACT_NATIVE_PACK.zip

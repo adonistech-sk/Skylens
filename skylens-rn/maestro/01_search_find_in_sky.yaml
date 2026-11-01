@@ -1,0 +1,31 @@
+# A search for Andromeda opens its real detail page, and Find in Sky selects it on the map.
+appId: sk.skylens.app
+---
+- launchApp
+- openLink: skylens://sky
+- extendedWaitUntil:
+    visible:
+      id: sky-search
+    timeout: 20000
+- tapOn:
+    id: sky-search
+- tapOn:
+    id: search-input
+- inputText: Andromeda
+- extendedWaitUntil:
+    visible:
+      id: result-Andromeda Galaxy
+    timeout: 8000
+- tapOn:
+    id: result-Andromeda Galaxy
+- assertVisible: M31
+- assertVisible: Spiral Galaxy.*
+- takeScreenshot: flow_andromeda_detail
+- tapOn:
+    id: find-in-sky
+- extendedWaitUntil:
+    visible:
+      id: sky-selection
+    timeout: 10000
+- assertVisible: Andromeda Galaxy
+- takeScreenshot: flow_find_in_sky

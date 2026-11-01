@@ -1,0 +1,50 @@
+# Get Started leads to Location, a manual choice reaches the sky, and every tab opens.
+appId: sk.skylens.app
+---
+- launchApp
+- openLink: skylens://onboarding
+- extendedWaitUntil:
+    visible:
+      id: get-started
+    timeout: 20000
+- tapOn:
+    id: get-started
+- extendedWaitUntil:
+    visible:
+      id: choose-manually
+    timeout: 8000
+- tapOn:
+    id: choose-manually
+- tapOn:
+    id: city-Bratislava
+- extendedWaitUntil:
+    visible:
+      id: sky-more
+    timeout: 15000
+- tapOn:
+    id: sky-more
+- tapOn:
+    id: tab-Tonight
+- assertVisible: Tonight
+- tapOn:
+    id: tab-Explore
+- assertVisible: The Orion Nebula
+- tapOn:
+    id: tab-Events
+- assertVisible: Upcoming
+- tapOn:
+    id: tab-More
+- assertVisible: SkyLens Pro
+- tapOn:
+    id: tab-Sky
+- extendedWaitUntil:
+    visible:
+      id: sky-identify
+    timeout: 15000
+- tapOn:
+    id: sky-identify
+- extendedWaitUntil:
+    visible:
+      id: sky-selection
+    timeout: 8000
+- takeScreenshot: flow_identify

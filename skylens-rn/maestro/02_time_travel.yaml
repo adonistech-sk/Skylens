@@ -1,0 +1,27 @@
+# Forward moves the clock, play runs it, pause stops it, and Now restores the start.
+appId: sk.skylens.app
+---
+- launchApp
+- openLink: skylens://time-travel
+- extendedWaitUntil:
+    visible: "Sun, Jan 17, 2027"
+    timeout: 20000
+- assertVisible: "21:25"
+- tapOn:
+    id: tt-forward
+- assertVisible: "22:25"
+- tapOn:
+    id: tt-speed
+- tapOn:
+    id: tt-speed
+- tapOn:
+    id: tt-play
+- waitForAnimationToEnd:
+    timeout: 3000
+- tapOn:
+    id: tt-play
+- assertNotVisible: "22:25"
+- takeScreenshot: flow_time_travel_moved
+- tapOn:
+    id: tt-now
+- assertVisible: "21:25"

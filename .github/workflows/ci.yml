@@ -5,6 +5,10 @@ name: CI
 
 on:
   push:
+    paths-ignore:
+      - 'skylens-rn/**'
+      - 'skylens_rn_implementation_pack/**'
+      - '.github/workflows/rn-ios.yml'
   pull_request:
   workflow_dispatch:
 

@@ -1,0 +1,135 @@
+# Builds the Expo app for the iOS Simulator on GitHub's macOS runners, then captures real
+# screenshots and drives real flows. The owner has no Mac, so this is the iOS evidence.
+#
+# Everything here uses deterministic screenshot mode: a fixed clock and observer with all
+# values still calculated by the normal code. See skylens-rn/src/state/demo.ts.
+
+name: SkyLens RN iOS
+
+on:
+  push:
+    branches: [skylens-rn]
+    paths:
+      - 'skylens-rn/**'
+      - '.github/workflows/rn-ios.yml'
+  workflow_dispatch:
+
+env:
+  EXPO_PUBLIC_SCREENSHOT_MODE: '1'
+  EXPO_NO_TELEMETRY: '1'
+  DEVICE_NAME: iPhone 17
+
+jobs:
+  ios:
+    name: Build, screenshot and drive
+    runs-on: macos-26
+    timeout-minutes: 100
+    defaults:
+      run:
+        working-directory: skylens-rn
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: skylens-rn/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck and test the astronomy
+        run: |
+          npx tsc --noEmit
+          npx vitest run --reporter=dot
+
+      - name: Show Xcode
+        run: |
+          xcodebuild -version
+          xcrun simctl list devicetypes | grep iPhone | tail -5
+
+      - name: Generate the native project
+        run: npx expo prebuild --platform ios --no-install
+
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: |
+            skylens-rn/ios/Pods
+            ~/Library/Caches/CocoaPods
+          key: pods-${{ runner.os }}-${{ hashFiles('skylens-rn/package-lock.json', 'skylens-rn/modules/**') }}
+
+      - name: Install pods
+        working-directory: skylens-rn/ios
+        run: pod install
+
+      - name: Build for the Simulator
+        working-directory: skylens-rn/ios
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -workspace SkyLens.xcworkspace -scheme SkyLens -configuration Release \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/dd" \
+            CODE_SIGNING_ALLOWED=NO \
+            > "$RUNNER_TEMP/build.log" 2>&1 || {
+              grep -nE 'error:|fatal error|\*\* BUILD' "$RUNNER_TEMP/build.log" | head -60
+              tail -40 "$RUNNER_TEMP/build.log"
+              exit 1
+            }
+          grep -E '\*\* BUILD' "$RUNNER_TEMP/build.log"
+
+      - name: Boot the Simulator and install
+        run: |
+          device=$(xcrun simctl list devices available | grep "$DEVICE_NAME (" | head -1 | grep -oE '[0-9A-F-]{36}' || true)
+          if [ -z "$device" ]; then
+            device=$(xcrun simctl list devices available | grep -E 'iPhone [0-9]+ \(' | tail -1 | grep -oE '[0-9A-F-]{36}')
+          fi
+          echo "UDID=$device" >> "$GITHUB_ENV"
+          xcrun simctl boot "$device"
+          xcrun simctl bootstatus "$device"
+          xcrun simctl status_bar "$device" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
+          xcrun simctl install "$device" "$RUNNER_TEMP/dd/Build/Products/Release-iphonesimulator/SkyLens.app"
+          xcrun simctl privacy "$device" grant location sk.skylens.app || true
+          xcrun simctl location "$device" set 48.1486,17.1077 || true
+
+      - name: Capture the ten screens
+        run: sh scripts/ios-shots.sh "$UDID" "$RUNNER_TEMP/shots"
+
+      - name: Keep the screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rn-screenshots
+          path: ${{ runner.temp }}/shots
+          if-no-files-found: warn
+
+      - name: Install Maestro
+        if: success()
+        working-directory: skylens-rn
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Drive the real flows
+        if: success()
+        run: |
+          mkdir -p "$RUNNER_TEMP/flows"
+          maestro --device "$UDID" test --format junit --output "$RUNNER_TEMP/flows/report.xml" --test-output-dir "$RUNNER_TEMP/flows" maestro/
+
+      - name: Keep the flow results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rn-flows
+          path: ${{ runner.temp }}/flows
+          if-no-files-found: ignore
+
+      - name: Keep the build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rn-build-log
+          path: ${{ runner.temp }}/build.log
+          if-no-files-found: ignore
