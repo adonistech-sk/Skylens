@@ -1,0 +1,7 @@
+# Maestro has no sleep, so wait on text that never appears for the given time.
+appId: sk.skylens.app
+---
+- extendedWaitUntil:
+    visible: "__never_shown__"
+    timeout: ${WAIT}
+    optional: true

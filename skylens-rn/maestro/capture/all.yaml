@@ -1,0 +1,112 @@
+# Captures every reference screen from the running build.
+appId: sk.skylens.app
+---
+- launchApp
+- runFlow:
+    file: ../lib/open.yaml
+    env:
+      LINK: skylens://onboarding
+- runFlow:
+    file: ../lib/settle.yaml
+    env:
+      WAIT: 4000
+- takeScreenshot: 01_onboarding
+- runFlow:
+    file: ../lib/open.yaml
+    env:
+      LINK: skylens://location
+- runFlow:
+    file: ../lib/settle.yaml
+    env:
+      WAIT: 4000
+- takeScreenshot: 02_location
+- runFlow:
+    file: ../lib/open.yaml
+    env:
+      LINK: skylens://sky
+- runFlow:
+    file: ../lib/settle.yaml
+    env:
+      WAIT: 9000
+- takeScreenshot: 03_sky_view
+- runFlow:
+    file: ../lib/open.yaml
+    env:
+      LINK: skylens://object/dso%3AM31
+- runFlow:
+    file: ../lib/settle.yaml
+    env:
+      WAIT: 5000
+- takeScreenshot: 04_object_detail_andromeda
+- runFlow:
+    file: ../lib/open.yaml
+    env:
+      LINK: skylens://tonight
+- runFlow:
+    file: ../lib/settle.yaml
+    env:
+      WAIT: 9000
+- takeScreenshot: 05_tonight
+- runFlow:
+    file: ../lib/open.yaml
+    env:
+      LINK: skylens://explore
+- runFlow:
+    file: ../lib/settle.yaml
+    env:
+      WAIT: 5000
+- takeScreenshot: 06_explore
+- runFlow:
+    file: ../lib/open.yaml
+    env:
+      LINK: skylens://time-travel
+- runFlow:
+    file: ../lib/settle.yaml
+    env:
+      WAIT: 5000
+- takeScreenshot: 07_time_travel
+- runFlow:
+    file: ../lib/open.yaml
+    env:
+      LINK: skylens://ar
+- runFlow:
+    file: ../lib/settle.yaml
+    env:
+      WAIT: 9000
+- takeScreenshot: 08_ar_sky
+- runFlow:
+    file: ../lib/open.yaml
+    env:
+      LINK: skylens://events
+- runFlow:
+    file: ../lib/settle.yaml
+    env:
+      WAIT: 25000
+- takeScreenshot: 09_events
+- runFlow:
+    file: ../lib/open.yaml
+    env:
+      LINK: skylens://pro
+- runFlow:
+    file: ../lib/settle.yaml
+    env:
+      WAIT: 6000
+- takeScreenshot: 10_pro_paywall
+- runFlow:
+    file: ../lib/open.yaml
+    env:
+      LINK: skylens://object/star%3A27989
+- runFlow:
+    file: ../lib/settle.yaml
+    env:
+      WAIT: 8000
+- takeScreenshot: 11_star_detail
+- runFlow:
+    file: ../lib/open.yaml
+    env:
+      LINK: skylens://search
+- runFlow:
+    file: ../lib/settle.yaml
+    env:
+      WAIT: 3000
+- takeScreenshot: 12_search_results

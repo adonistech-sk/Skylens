@@ -94,8 +94,18 @@ jobs:
           xcrun simctl privacy "$device" grant location sk.skylens.app || true
           xcrun simctl location "$device" set 48.1486,17.1077 || true
 
-      - name: Capture the ten screens
-        run: sh scripts/ios-shots.sh "$UDID" "$RUNNER_TEMP/shots"
+      - name: Install Maestro
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Capture the screens
+        run: |
+          mkdir -p "$RUNNER_TEMP/shots" "$RUNNER_TEMP/capture"
+          cd "$RUNNER_TEMP/capture"
+          maestro --device "$UDID" test --test-output-dir "$RUNNER_TEMP/capture" "$GITHUB_WORKSPACE/skylens-rn/maestro/capture/all.yaml"
+          find "$RUNNER_TEMP/capture" "$GITHUB_WORKSPACE/skylens-rn" -name '[01][0-9]_*.png' -not -path '*/node_modules/*' -exec cp {} "$RUNNER_TEMP/shots/" \;
+          ls "$RUNNER_TEMP/shots"
 
       - name: Keep the screenshots
         if: always()
@@ -104,13 +114,6 @@ jobs:
           name: rn-screenshots
           path: ${{ runner.temp }}/shots
           if-no-files-found: warn
-
-      - name: Install Maestro
-        if: success()
-        working-directory: skylens-rn
-        run: |
-          curl -fsSL "https://get.maestro.mobile.dev" | bash
-          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
       - name: Drive the real flows
         if: success()

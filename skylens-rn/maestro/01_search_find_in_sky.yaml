@@ -2,7 +2,10 @@
 appId: sk.skylens.app
 ---
 - launchApp
-- openLink: skylens://sky
+- runFlow:
+    file: lib/open.yaml
+    env:
+      LINK: skylens://sky
 - extendedWaitUntil:
     visible:
       id: sky-search

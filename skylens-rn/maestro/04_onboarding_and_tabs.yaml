@@ -2,7 +2,10 @@
 appId: sk.skylens.app
 ---
 - launchApp
-- openLink: skylens://onboarding
+- runFlow:
+    file: lib/open.yaml
+    env:
+      LINK: skylens://onboarding
 - extendedWaitUntil:
     visible:
       id: get-started
