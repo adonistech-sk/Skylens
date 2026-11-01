@@ -51,6 +51,13 @@ final class AppServices {
         location = LocationService()
         store = StoreService(model: model)
         notifications = NotificationService()
+
+        // UI tests pass a fixed moment so CI can photograph the night sky at any hour.
+        let arguments = ProcessInfo.processInfo.arguments
+        if let flag = arguments.firstIndex(of: "-skyDate"), arguments.indices.contains(flag + 1),
+           let date = try? Date(arguments[flag + 1], strategy: .iso8601) {
+            model.setSkyDate(date)
+        }
     }
 }
 

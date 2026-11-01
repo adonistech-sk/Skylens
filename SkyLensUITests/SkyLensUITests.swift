@@ -53,6 +53,19 @@ final class SkyLensUITests: XCTestCase {
         capture("03-sky")
     }
 
+    /// Daytime CI can't otherwise show the sky at night, so these fix the moment. The
+    /// date is a moonless summer evening in Warsaw with the Milky Way high in the south.
+    func testNightAndTwilightSkies() {
+        for (name, date) in [("13-night-sky", "2026-08-12T21:30:00Z"), ("14-twilight-sky", "2026-08-12T18:55:00Z")] {
+            app.terminate()
+            app.launchArguments = ["-uitesting", "-skyDate", date]
+            app.launch()
+            completeOnboarding()
+            pause(4)
+            capture(name)
+        }
+    }
+
     func testOnboardingPersistsAcrossLaunches() {
         // A relaunch with the same directory would skip onboarding. The -uitesting
         // directory is new per launch, so this is covered by AppModelTests instead,
@@ -121,9 +134,10 @@ final class SkyLensUITests: XCTestCase {
         let toggle = app.switches["settingsNightVisionToggle"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 5))
         capture("10-settings")
-        // The middle of a row is its label, so the tap goes to the switch at the trailing edge.
-        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
-        XCTAssertEqual(toggle.value as? String, "1")
+        // The row reports as a switch too, and the real control is the one nested in it.
+        toggle.switches.firstMatch.tap()
+        let isOn = NSPredicate(format: "value == '1'")
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: isOn, evaluatedWith: toggle)], timeout: 5), .completed)
         pause(1)
         capture("11-night-vision-settings")
     }

@@ -216,7 +216,8 @@ fragment float4 skyFragment(FullScreenOut in [[stage_in]],
         float twilight = smoothstep(-0.32, -0.02, sun.z) * (1.0 - smoothstep(0.05, 0.35, sun.z));
         float band = exp(-max(altitude, 0.0) * 7.0);
         color += float3(0.95, 0.46, 0.18) * twilight * band * (0.18 + 0.7 * pow(toSun, 6.0));
-        color += float3(1.0, 0.92, 0.80) * pow(toSun, 220.0) * smoothstep(-0.1, 0.05, sun.z);
+        // A tight bright core with a soft surround, so the disc still reads inside it.
+        color += float3(1.0, 0.92, 0.80) * (pow(toSun, 1400.0) * 0.8 + pow(toSun, 160.0) * 0.16) * smoothstep(-0.1, 0.05, sun.z);
 
         // Glow near the horizon that gives the planetarium view some depth at night.
         color += float3(0.0030, 0.0052, 0.0105) * exp(-max(altitude, 0.0) * 11.0) * (1.0 - brightness);
@@ -237,14 +238,23 @@ fragment float4 skyFragment(FullScreenOut in [[stage_in]],
 fragment float4 groundFragment(FullScreenOut in [[stage_in]],
                                constant SkyUniforms &u [[buffer(1)]]) {
     float3 ray = horizonRay(in.ndc, u);
-    // A decorative ridge line, at most about a degree high, so the horizon reads as a
-    // place rather than a ruled edge.
+    // Two decorative ridge lines, at most about a degree high: a hazy far range behind a
+    // dark near one, so the horizon reads as a place rather than a ruled edge.
     float az = atan2(ray.y, ray.x);
-    float ridge = 0.0075 + 0.0042 * sin(az * 3.0 + 1.1) + 0.0026 * sin(az * 7.0 + 2.3)
-        + 0.0014 * sin(az * 17.0 + 0.4) + 0.0007 * sin(az * 43.0 + 1.7) + 0.0004 * sin(az * 97.0);
-    float below = 1.0 - smoothstep(ridge - 0.0009, ridge + 0.0009, ray.z);
+    float farRidge = 0.0105 + 0.0058 * sin(az * 3.0 + 1.1) + 0.0036 * sin(az * 7.0 + 2.3)
+        + 0.0020 * sin(az * 17.0 + 0.4) + 0.0010 * sin(az * 43.0 + 1.7) + 0.0005 * sin(az * 97.0);
+    float nearRidge = 0.0044 + 0.0026 * sin(az * 5.0 + 0.7) + 0.0016 * sin(az * 11.0 + 2.9)
+        + 0.0007 * sin(az * 31.0 + 1.3) + 0.0003 * sin(az * 73.0 + 0.2);
+    float below = 1.0 - smoothstep(farRidge - 0.0009, farRidge + 0.0009, ray.z);
     if (below <= 0.0) { discard_fragment(); }
-    float3 color = mix(float3(0.0009, 0.0013, 0.0024), float3(0.045, 0.060, 0.050), u.sun.w);
+    float belowNear = 1.0 - smoothstep(nearRidge - 0.0009, nearRidge + 0.0009, ray.z);
+
+    float level = u.sun.w;
+    float3 farColor = mix(float3(0.0016, 0.0023, 0.0042), float3(0.055, 0.080, 0.115), level);
+    // The land falls into shadow toward the bottom of the view.
+    float3 nearColor = mix(float3(0.0006, 0.0009, 0.0016), float3(0.009, 0.013, 0.017), level)
+        * (0.5 + 0.5 * smoothstep(-0.30, 0.0, ray.z));
+    float3 color = mix(farColor, nearColor, belowNear);
     float alpha = below * u.mode.z;
     return finish(color * alpha, alpha, u);
 }

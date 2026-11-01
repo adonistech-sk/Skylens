@@ -72,6 +72,23 @@ final class LocationService: NSObject {
         ), state: .idle)
     }
 
+    /// Turns typed coordinates into a named place with its own time zone. Without a
+    /// network it keeps the coordinates as the name.
+    func place(latitude: Double, longitude: Double) async -> SavedLocation {
+        var name = String(format: "%.2f°, %.2f°", latitude, longitude)
+        var zone = TimeZone.current
+        let location = CLLocation(latitude: latitude, longitude: longitude)
+        if let place = try? await CLGeocoder().reverseGeocodeLocation(location).first {
+            name = place.locality ?? place.name ?? name
+            zone = place.timeZone ?? zone
+        }
+        return SavedLocation(
+            name: name,
+            location: ObserverLocation(latitude: latitude, longitude: longitude),
+            timeZoneIdentifier: zone.identifier
+        )
+    }
+
     /// Manual place search, which works without any location permission.
     func search(_ query: String) async -> [SavedLocation] {
         let request = MKLocalSearch.Request()

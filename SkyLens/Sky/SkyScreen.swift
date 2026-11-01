@@ -183,9 +183,8 @@ private struct SkyStatusBar: View {
                             .font(Typography.data)
                             .foregroundStyle(model.isLive ? theme.secondary : theme.accent)
                     }
-                    .padding(.horizontal, Space.m)
-                    .padding(.vertical, Space.s)
-                    .skyPanel(cornerRadius: 12)
+                    .frame(minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Time and location")
@@ -196,11 +195,10 @@ private struct SkyStatusBar: View {
             Text(services.sky.currentHeading)
                 .font(Typography.data)
                 .foregroundStyle(theme.secondary)
-                .padding(.horizontal, Space.m)
-                .padding(.vertical, Space.s)
-                .skyPanel(cornerRadius: 12)
                 .accessibilityHidden(true)
         }
+        // Plain text over the sky. The shadow keeps it readable on a daytime blue.
+        .shadow(color: .black.opacity(0.5), radius: 5, y: 1)
     }
 
     private var timeText: String {
@@ -255,7 +253,7 @@ private struct SelectionCard: View {
                             Text(summary)
                                 .font(Typography.caption)
                                 .foregroundStyle(theme.secondary)
-                                .lineLimit(2)
+                                .lineLimit(3)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         Spacer(minLength: 0)

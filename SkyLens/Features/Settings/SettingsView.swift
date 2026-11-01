@@ -194,6 +194,7 @@ struct LocationPicker: View {
     @State private var isSearching = false
     @State private var latitude = ""
     @State private var longitude = ""
+    @State private var isNamingCoordinates = false
 
     private var saved: [SavedLocation] { services.model.preferences.savedLocations }
 
@@ -286,12 +287,12 @@ struct LocationPicker: View {
     }
 
     private func useCoordinates() {
-        guard let (lat, lon) = coordinates else { return }
-        choose(SavedLocation(
-            name: String(format: "%.2f°, %.2f°", lat, lon),
-            location: .init(latitude: lat, longitude: lon),
-            timeZoneIdentifier: TimeZone.current.identifier
-        ))
+        guard let (lat, lon) = coordinates, !isNamingCoordinates else { return }
+        isNamingCoordinates = true
+        Task {
+            choose(await services.location.place(latitude: lat, longitude: lon))
+            isNamingCoordinates = false
+        }
     }
 
     private func choose(_ place: SavedLocation) {

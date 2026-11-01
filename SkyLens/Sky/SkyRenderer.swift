@@ -108,6 +108,8 @@ final class SkyRenderer: NSObject, MTKViewDelegate {
     // Labels: placement happens at 8 Hz, while positions and fades run every frame.
     private var placed: [String: PlacedLabel] = [:]
     private var lastLabelUpdate = 0.0
+    /// 1 under a dark sky and 0 in daylight, for what only shows against the dark.
+    private var nightVisibility: Float = 1
     private var lastFrameTime = 0.0
 
     private struct PlacedLabel {
@@ -334,10 +336,25 @@ final class SkyRenderer: NSObject, MTKViewDelegate {
         }
     }
 
+    /// How much of a name to show under the current sky. Stars and deep-sky objects can't
+    /// be seen in daylight, so naming them would only label empty blue. Constellations
+    /// stay faintly present as a way to navigate, and the selection always shows.
+    private func labelVisibility(_ id: String) -> Float {
+        if id == sky.app.selection?.rawValue { return 1 }
+        switch ObjectID(rawValue: id).kind {
+        case .body: return 1
+        case .constellation: return 0.45 + 0.55 * nightVisibility
+        default: return nightVisibility
+        }
+    }
+
     private func updateLabels(camera: SkyCamera, frame: SkyFrame, display: DisplayOptions) {
         guard let atlas else { return }
         var candidates: [LabelLayout.Candidate] = []
         candidates.reserveCapacity(200)
+        let selected = sky.app.selection?.rawValue
+        // The status line and toolbar sit over these bands, so names there would collide.
+        let usableHeight = (top: 116.0, bottom: camera.screen.height - 104)
 
         for label in labels where camera.fieldOfView <= label.maxFieldOfView {
             switch label.style {
@@ -347,6 +364,7 @@ final class SkyRenderer: NSObject, MTKViewDelegate {
             case .deepSky where !display.deepSkyObjects: continue
             default: break
             }
+            if labelVisibility(label.id) < 0.02 { continue }
             guard let size = atlas.size(for: label.id) else { continue }
             let direction: Vec3
             if let fixed = label.direction {
@@ -357,9 +375,19 @@ final class SkyRenderer: NSObject, MTKViewDelegate {
                 continue
             }
             // Names below the ground would only be clutter over a dark silhouette.
-            if display.horizon, direction.z < 0.012 { continue }
+            if display.horizon, direction.z < 0.018 { continue }
             guard let point = camera.project(direction), camera.isVisible(point) else { continue }
-            let offset: Double = label.style == .constellation ? -size.height / 2 : 7
+            if label.id != selected, point.y < usableHeight.top || point.y > usableHeight.bottom { continue }
+            let offset: Double
+            if label.id == selected {
+                offset = 24 // Clears the reticle.
+            } else if label.style == .constellation {
+                offset = -size.height / 2
+            } else if case .body(let body)? = ObjectID(rawValue: label.id).kind, let state = bodyStates[body] {
+                offset = max(7, state.radiusPoints + 4) // Clears the disc.
+            } else {
+                offset = 7
+            }
             candidates.append(LabelLayout.Candidate(
                 id: label.id, anchor: point, size: (size.width, size.height),
                 priority: label.priority, offsetBelow: offset
@@ -440,8 +468,11 @@ final class SkyRenderer: NSObject, MTKViewDelegate {
             sunAltitude: sunAltitude, moonAltitude: moon.map { Horizontal(unitVector: $0.direction).altitude },
             moonIllumination: moon?.illumination ?? 0
         )
-        // In AR the real sky is behind the overlay, so nothing dims.
-        let skyLevel = isAR ? 0 : brightness.total
+        // In AR the real sky is behind the overlay, so nothing dims. With the atmosphere
+        // switched off the view shows the stars as they'd appear with no air at all.
+        let skyLevel = isAR || !display.atmosphere ? 0 : brightness.total
+        let daylight = max(0, min(1, (skyLevel - 0.45) / 0.35))
+        nightVisibility = Float(1 - daylight * daylight * (3 - 2 * daylight))
         let ceiling = sky.app.starMagnitudeCeiling
         let magnitudeLimit = min(
             StarAppearance.limitingMagnitude(fieldOfView: camera.fieldOfView, base: display.magnitudeLimit, skyBrightness: skyLevel),
@@ -470,7 +501,7 @@ final class SkyRenderer: NSObject, MTKViewDelegate {
             encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         }
 
-        drawLines(encoder, display: display, isDaylight: skyLevel > 0.6, isAR: isAR)
+        drawLines(encoder, display: display, isAR: isAR)
 
         if let stars = starBuffer {
             let count = catalog.stars.count(brighterThan: Float(magnitudeLimit))
@@ -500,7 +531,7 @@ final class SkyRenderer: NSObject, MTKViewDelegate {
         if view.preferredFramesPerSecond != desired { view.preferredFramesPerSecond = desired }
     }
 
-    private func drawLines(_ encoder: MTLRenderCommandEncoder, display: DisplayOptions, isDaylight: Bool, isAR: Bool) {
+    private func drawLines(_ encoder: MTLRenderCommandEncoder, display: DisplayOptions, isAR: Bool) {
         encoder.setRenderPipelineState(linePipeline)
 
         func draw(_ buffer: MTLBuffer?, color: SIMD4<Float>, width: Float, frame: Float) {
@@ -516,7 +547,7 @@ final class SkyRenderer: NSObject, MTKViewDelegate {
         if display.equatorialGrid { draw(equatorialGridBuffer, color: SIMD4(0.40, 0.55, 0.75, 0.28), width: 0.5, frame: 0) }
         if display.constellationBoundaries { draw(boundaryBuffer, color: SIMD4(0.45, 0.45, 0.60, 0.22), width: 0.5, frame: 0) }
         if display.constellationLines {
-            draw(constellationBuffer, color: SIMD4(0.62, 0.72, 0.88, isDaylight ? 0.12 : 0.17), width: 0.5, frame: 0)
+            draw(constellationBuffer, color: SIMD4(0.62, 0.72, 0.88, 0.05 + 0.12 * nightVisibility), width: 0.5, frame: 0)
         }
     }
 
@@ -525,14 +556,16 @@ final class SkyRenderer: NSObject, MTKViewDelegate {
         markers.reserveCapacity(64)
 
         // Deep-sky rings appear once zoomed in enough to be a useful guide.
-        if display.deepSkyObjects, camera.fieldOfView < 70 {
+        if display.deepSkyObjects, camera.fieldOfView < 70, nightVisibility > 0.02 {
             for (object, direction) in deepSkyMarkers {
                 let h = frame.j2000ToHorizon * direction
                 guard camera.contains(h, margin: 20) else { continue }
                 let size = (object.deepSky?.majorAxis ?? 6) / 60 * camera.pointsPerDegree
+                var color = deepSkyColor(object.type)
+                color.w *= nightVisibility
                 markers.append(Marker(
                     directionRadius: SIMD4(h.simd, Float(max(4.5, min(size / 2, 90)))),
-                    color: deepSkyColor(object.type), lightKind: SIMD4(0, 0, 0, 1)
+                    color: color, lightKind: SIMD4(0, 0, 0, 1)
                 ))
             }
         }
@@ -540,9 +573,11 @@ final class SkyRenderer: NSObject, MTKViewDelegate {
         for body in SolarSystemBody.allCases {
             guard let s = bodyStates[body], camera.contains(s.direction, margin: 40) else { continue }
             // Light direction in the marker's screen space. The Sun's direction relative
-            // to the body, seen by the camera, gives the correct limb for any roll.
+            // to the body, seen by the camera, gives the correct limb for any roll. A phase
+            // only means something on a disc big enough to show one: on a small planet
+            // marker it would just paint a dark dot.
             var light = SIMD3<Float>(0, 0, 1)
-            if body != .sun, let sun = bodyStates[.sun] {
+            if body != .sun, s.radiusPoints >= 8, let sun = bodyStates[.sun] {
                 let view = camera.orientation * sun.direction
                 let centre = camera.orientation * s.direction
                 let tangent = Vec3(view.x - centre.x, view.y - centre.y, 0)
@@ -563,8 +598,9 @@ final class SkyRenderer: NSObject, MTKViewDelegate {
             markers.append(Marker(directionRadius: SIMD4(direction.simd, 6), color: tagColor(tag.color), lightKind: SIMD4(0, 0, 0, 3)))
         }
 
-        for s in satelliteStates where camera.contains(s.direction, margin: 10) {
-            markers.append(Marker(directionRadius: SIMD4(s.direction.simd, 4), color: SIMD4(0.75, 0.95, 0.85, 1), lightKind: SIMD4(0, 0, 0, 3)))
+        // Satellites shine by reflected sunlight against a dark sky, so none show by day.
+        for s in satelliteStates where nightVisibility > 0.02 && camera.contains(s.direction, margin: 10) {
+            markers.append(Marker(directionRadius: SIMD4(s.direction.simd, 4), color: SIMD4(0.75, 0.95, 0.85, nightVisibility), lightKind: SIMD4(0, 0, 0, 3)))
         }
 
         if let id = sky.app.selection, let object = sky.app.object(id),
@@ -607,7 +643,7 @@ final class SkyRenderer: NSObject, MTKViewDelegate {
                   let glyph = atlas.glyph(for: id) else { continue }
             instances.append(LabelInstance(
                 directionOffset: SIMD4(direction.simd, label.offset),
-                uvRect: glyph.uv, sizeAlpha: SIMD4(Float(glyph.width), Float(glyph.height), alpha, 0),
+                uvRect: glyph.uv, sizeAlpha: SIMD4(Float(glyph.width), Float(glyph.height), alpha * labelVisibility(id), 0),
                 color: labelColor(id)
             ))
         }
@@ -700,7 +736,9 @@ final class SkyRenderer: NSObject, MTKViewDelegate {
 
     private func labelColor(_ id: String) -> SIMD4<Float> {
         switch ObjectID(rawValue: id).kind {
-        case .constellation: SIMD4(0.56, 0.68, 0.84, 0.72)
+        case .constellation: nightVisibility < 0.5 ? SIMD4(0.90, 0.94, 1.00, 0.8) : SIMD4(0.56, 0.68, 0.84, 0.72)
+        // Pale text can't read against the Sun's own glare.
+        case .body(.sun): nightVisibility < 0.5 ? SIMD4(0.03, 0.07, 0.14, 1) : SIMD4(0.96, 0.92, 0.82, 1)
         case .body: SIMD4(0.96, 0.92, 0.82, 1)
         case .deepSky: SIMD4(0.70, 0.85, 0.80, 0.85)
         default: SIMD4(0.82, 0.86, 0.92, 0.9)

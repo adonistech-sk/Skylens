@@ -451,6 +451,7 @@ extension View {
     public func preferredColorScheme(_ c: ColorScheme?) -> some View { self }
     public func statusBarHidden(_ h: Bool = true) -> some View { self }
     public func opacity(_ o: Double) -> some View { self }
+    public func shadow(color: Color = .clear, radius: CGFloat, x: CGFloat = 0, y: CGFloat = 0) -> some View { self }
     public func disabled(_ d: Bool) -> some View { self }
     public func accessibilityIdentifier(_ s: String) -> some View { self }
     public func accessibilityLabel(_ s: LocalizedStringKey) -> some View { self }
@@ -788,6 +789,7 @@ public struct CLLocationCoordinate2D: Sendable {
 }
 public func CLLocationCoordinate2DIsValid(_ c: CLLocationCoordinate2D) -> Bool { true }
 public class CLLocation: @unchecked Sendable {
+    public init(latitude: Double, longitude: Double) {}
     public var coordinate: CLLocationCoordinate2D { stub() }
     public var altitude: Double { 0 }
     public var verticalAccuracy: Double { 0 }

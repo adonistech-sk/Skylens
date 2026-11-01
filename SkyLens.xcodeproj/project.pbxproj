@@ -359,6 +359,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = SkyLens;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.education";
 				INFOPLIST_KEY_NSCameraUsageDescription = "SkyLens shows the live camera behind star labels in AR mode. Video stays on your device.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "SkyLens uses your location to calculate which stars and planets are above you. You can enter a place by hand instead.";
@@ -391,6 +392,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = SkyLens;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.education";
 				INFOPLIST_KEY_NSCameraUsageDescription = "SkyLens shows the live camera behind star labels in AR mode. Video stays on your device.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "SkyLens uses your location to calculate which stars and planets are above you. You can enter a place by hand instead.";
