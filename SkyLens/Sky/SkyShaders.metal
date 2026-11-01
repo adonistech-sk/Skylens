@@ -69,6 +69,7 @@ struct StarOut {
     float pointSize [[point_size]];
     float3 color;
     float alpha;
+    float glow;     // 0 for ordinary stars, up to 1 for the sky's brightest
 };
 
 static inline float3 starColor(float bv) {
@@ -91,9 +92,11 @@ vertex StarOut starVertex(uint vid [[vertex_id]],
 
     StarOut out;
     float delta = max(u.stars.x - s.magnitude, 0.0);
-    float radius = max(0.45, 0.55 * pow(delta + 0.5, 0.72) * u.stars.y);
+    float radius = max(0.45, 0.50 * pow(delta + 0.5, 0.95) * u.stars.y);
     out.alpha = clamp((u.stars.x - s.magnitude + 0.15) / 1.1, 0.0, 1.0);
-    out.color = starColor(s.colorIndex);
+    out.glow = clamp((2.0 - s.magnitude) / 3.0, 0.0, 1.0);
+    // The eye only sees color in bright stars, so faint ones lean white.
+    out.color = mix(float3(0.92, 0.94, 1.0), starColor(s.colorIndex), 0.3 + 0.7 * out.glow);
     out.pointSize = radius * 4.0 * u.stars.z;
     out.position = isCulled(p.k, u) || out.alpha <= 0.0 ? float4(2.0, 2.0, 0.0, 1.0) : clipPosition(p.points, u);
     return out;
@@ -104,7 +107,7 @@ fragment float4 starFragment(StarOut in [[stage_in]],
                              constant SkyUniforms &u [[buffer(1)]]) {
     float d = length(coord - float2(0.5)) * 2.0;
     float core = exp(-d * d * 16.0) * 1.35;
-    float halo = exp(-d * d * 3.2) * 0.10;
+    float halo = exp(-d * d * 4.5) * (0.07 + 0.30 * in.glow);
     float intensity = (core + halo) * in.alpha;
     return finish(in.color * intensity, intensity, u);
 }
@@ -227,10 +230,16 @@ fragment float4 skyFragment(FullScreenOut in [[stage_in]],
         // The transpose of a rotation is its inverse.
         float3 j = ray * u.j2000ToHorizon;
         float2 uv = float2(atan2(j.y, j.x) / 6.2831853, 0.5 - asin(clamp(j.z, -1.0, 1.0)) / 3.1415927);
-        float glow = milkyWay.sample(linear, uv).r;
-        color += float3(0.030, 0.033, 0.046) * glow * (1.0 - brightness * 2.0);
+        float glow = pow(milkyWay.sample(linear, uv).r, 1.6);
+        // Cool at the faint edges and warmer through the dense star clouds.
+        color += mix(float3(0.022, 0.028, 0.044), float3(0.066, 0.058, 0.056), glow) * glow * (1.0 - brightness * 2.0);
     }
-    return finish(color, 1.0, u);
+
+    // A gradient this smooth bands on an 8-bit display, so each pixel gets a sub-step
+    // nudge of noise, sized to one sRGB step at that brightness.
+    float noise = fract(52.9829189 * fract(dot(in.position.xy, float2(0.06711056, 0.00583715))));
+    color += (noise - 0.5) * (0.00030 + 0.012 * dot(color, float3(0.3, 0.6, 0.1)));
+    return finish(max(color, float3(0.0)), 1.0, u);
 }
 
 /// Translucent ground, drawn over the sky so objects below the horizon stay visible

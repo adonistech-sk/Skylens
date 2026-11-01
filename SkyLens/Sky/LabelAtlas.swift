@@ -62,6 +62,12 @@ final class LabelAtlas {
         }
 
         var entries: [(key: String, glyph: Glyph)] = []
+        // These go first: the sky always needs them, and the atlas can fill up.
+        for text in extra {
+            if let g = place(text, text, font: .systemFont(ofSize: 13, weight: .semibold), tracking: 0.5) {
+                entries.append((text, g))
+            }
+        }
         for label in labels {
             let font: UIFont
             var tracking: CGFloat = 0
@@ -80,12 +86,6 @@ final class LabelAtlas {
                 entries.append((label.id, g))
             }
         }
-        for text in extra {
-            if let g = place(text, text, font: .systemFont(ofSize: 13, weight: .semibold), tracking: 0.5) {
-                entries.append((text, g))
-            }
-        }
-
         guard let bytes = context.data else { return nil }
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r8Unorm, width: side, height: side, mipmapped: false)
         descriptor.usage = .shaderRead

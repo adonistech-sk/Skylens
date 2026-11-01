@@ -97,7 +97,9 @@ struct PanelBackground: ViewModifier {
             if theme.isNightVision {
                 shape.fill(theme.surface)
             } else {
+                // Dark enough under the text to stay readable over a daytime sky.
                 shape.fill(.ultraThinMaterial)
+                shape.fill(theme.background.opacity(0.72))
             }
             shape.strokeBorder(theme.stroke, lineWidth: 0.5)
         }
@@ -114,5 +116,15 @@ extension View {
         environment(\.theme, theme)
             .tint(theme.accent)
             .preferredColorScheme(.dark)
+            .overlay {
+                // System lists and titles keep their own white text, so night vision
+                // filters the finished sheet to red instead of restyling every control.
+                if theme.isNightVision {
+                    Color(red: 1, green: 0.07, blue: 0)
+                        .blendMode(.multiply)
+                        .ignoresSafeArea()
+                        .allowsHitTesting(false)
+                }
+            }
     }
 }

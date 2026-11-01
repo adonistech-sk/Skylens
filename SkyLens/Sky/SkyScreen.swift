@@ -181,7 +181,7 @@ private struct SkyStatusBar: View {
                             .lineLimit(1)
                         Text(timeText)
                             .font(Typography.data)
-                            .foregroundStyle(model.isLive ? theme.secondary : theme.accent)
+                            .foregroundStyle(model.isLive ? theme.primary.opacity(0.85) : theme.accent)
                     }
                     .frame(minHeight: 44, alignment: .leading)
                     .contentShape(Rectangle())
@@ -194,7 +194,7 @@ private struct SkyStatusBar: View {
             Spacer()
             Text(services.sky.currentHeading)
                 .font(Typography.data)
-                .foregroundStyle(theme.secondary)
+                .foregroundStyle(theme.primary.opacity(0.85))
                 .accessibilityHidden(true)
         }
         // Plain text over the sky. The shadow keeps it readable on a daytime blue.

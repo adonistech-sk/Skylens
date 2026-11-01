@@ -121,6 +121,8 @@ public struct Color: ShapeStyle, View, Equatable, Sendable {
     public func opacity(_ o: Double) -> Color { self }
     public static let white = Color(.sRGB, red: 1, green: 1, blue: 1)
     public static let clear = Color(.sRGB, red: 0, green: 0, blue: 0)
+    public static let black = Color(.sRGB, red: 0, green: 0, blue: 0)
+    public init(red: Double, green: Double, blue: Double) { self.init(.sRGB, red: red, green: green, blue: blue) }
 }
 extension ShapeStyle where Self == Color {
     public static var white: Color { Color.white }
@@ -452,6 +454,7 @@ extension View {
     public func statusBarHidden(_ h: Bool = true) -> some View { self }
     public func opacity(_ o: Double) -> some View { self }
     public func shadow(color: Color = .clear, radius: CGFloat, x: CGFloat = 0, y: CGFloat = 0) -> some View { self }
+    public func blendMode(_ mode: BlendMode) -> some View { self }
     public func disabled(_ d: Bool) -> some View { self }
     public func accessibilityIdentifier(_ s: String) -> some View { self }
     public func accessibilityLabel(_ s: LocalizedStringKey) -> some View { self }
@@ -1041,3 +1044,5 @@ extension Path {
     public mutating func addArc(center: CGPoint, radius: CGFloat, startAngle: Angle, endAngle: Angle, clockwise: Bool) {}
     public mutating func closeSubpath() {}
 }
+
+public enum BlendMode: Sendable { case normal, multiply }

@@ -70,7 +70,7 @@ final class SkyLensUITests: XCTestCase {
         // A relaunch with the same directory would skip onboarding. The -uitesting
         // directory is new per launch, so this is covered by AppModelTests instead,
         // and this test checks only that the first screen is onboarding.
-        XCTAssertTrue(app.buttons["getStartedButton"].exists)
+        XCTAssertTrue(app.buttons["getStartedButton"].waitForExistence(timeout: 20))
     }
 
     func testSearchSelectFindInSky() {
@@ -140,6 +140,9 @@ final class SkyLensUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: isOn, evaluatedWith: toggle)], timeout: 5), .completed)
         pause(1)
         capture("11-night-vision-settings")
+        app.buttons["Done"].firstMatch.tap()
+        pause(3)
+        capture("15-night-vision-sky")
     }
 
     func testPaywallCanBeLeftWithoutPaying() {

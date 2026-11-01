@@ -9,7 +9,7 @@ public enum StarAppearance {
     /// range of sizes pleasant instead of physically accurate.
     public static func pointRadius(magnitude: Double, limit: Double, scale: Double = 1) -> Double {
         let delta = max(0, limit - magnitude)
-        return max(0.45, 0.55 * pow(delta + 0.5, 0.72) * scale)
+        return max(0.45, 0.50 * pow(delta + 0.5, 0.95) * scale)
     }
 
     /// Faint stars are dimmed rather than cut off, so raising the limit never pops.

@@ -375,7 +375,7 @@ final class SkyRenderer: NSObject, MTKViewDelegate {
                 continue
             }
             // Names below the ground would only be clutter over a dark silhouette.
-            if display.horizon, direction.z < 0.018 { continue }
+            if display.horizon, direction.z < 0.018, label.id != selected { continue }
             guard let point = camera.project(direction), camera.isVisible(point) else { continue }
             if label.id != selected, point.y < usableHeight.top || point.y > usableHeight.bottom { continue }
             let offset: Double
@@ -471,7 +471,7 @@ final class SkyRenderer: NSObject, MTKViewDelegate {
         // In AR the real sky is behind the overlay, so nothing dims. With the atmosphere
         // switched off the view shows the stars as they'd appear with no air at all.
         let skyLevel = isAR || !display.atmosphere ? 0 : brightness.total
-        let daylight = max(0, min(1, (skyLevel - 0.45) / 0.35))
+        let daylight = max(0, min(1, (skyLevel - 0.3) / 0.3))
         nightVisibility = Float(1 - daylight * daylight * (3 - 2 * daylight))
         let ceiling = sky.app.starMagnitudeCeiling
         let magnitudeLimit = min(
@@ -489,7 +489,7 @@ final class SkyRenderer: NSObject, MTKViewDelegate {
         uniforms.sun = SIMD4(sunDirection.simd, Float(skyLevel))
         uniforms.mode = SIMD4(
             display.nightVision ? 1 : 0, isAR ? 1 : 0,
-            0.965, display.atmosphere ? 1 : 0
+            0.99, display.atmosphere ? 1 : 0
         )
 
         encoder.setVertexBytes(&uniforms, length: MemoryLayout<SkyUniforms>.stride, index: 1)
@@ -519,6 +519,8 @@ final class SkyRenderer: NSObject, MTKViewDelegate {
             encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         }
 
+        // Over the ground, so a selection below the horizon can still be found.
+        drawSelection(encoder, frame: frame)
         drawLabels(encoder, frame: frame, dt: dt, display: display)
 
         encoder.endEncoding()
@@ -547,7 +549,7 @@ final class SkyRenderer: NSObject, MTKViewDelegate {
         if display.equatorialGrid { draw(equatorialGridBuffer, color: SIMD4(0.40, 0.55, 0.75, 0.28), width: 0.5, frame: 0) }
         if display.constellationBoundaries { draw(boundaryBuffer, color: SIMD4(0.45, 0.45, 0.60, 0.22), width: 0.5, frame: 0) }
         if display.constellationLines {
-            draw(constellationBuffer, color: SIMD4(0.62, 0.72, 0.88, 0.05 + 0.12 * nightVisibility), width: 0.5, frame: 0)
+            draw(constellationBuffer, color: SIMD4(0.62, 0.72, 0.88, 0.05 + 0.05 * nightVisibility), width: 0.5, frame: 0)
         }
     }
 
@@ -603,15 +605,19 @@ final class SkyRenderer: NSObject, MTKViewDelegate {
             markers.append(Marker(directionRadius: SIMD4(s.direction.simd, 4), color: SIMD4(0.75, 0.95, 0.85, nightVisibility), lightKind: SIMD4(0, 0, 0, 3)))
         }
 
-        if let id = sky.app.selection, let object = sky.app.object(id),
-           let direction = try? Locator.direction(of: object, frame: frame, tracker: sky.tracker(for: id)) {
-            markers.append(Marker(directionRadius: SIMD4(direction.simd, 24), color: SIMD4(0.84, 0.74, 0.57, 1), lightKind: SIMD4(0, 0, 0, 2)))
-        }
-
         guard !markers.isEmpty else { return }
         encoder.setRenderPipelineState(markerPipeline)
         setInstances(markers, on: encoder)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6, instanceCount: markers.count)
+    }
+
+    private func drawSelection(_ encoder: MTLRenderCommandEncoder, frame: SkyFrame) {
+        guard let id = sky.app.selection, let object = sky.app.object(id),
+              let direction = try? Locator.direction(of: object, frame: frame, tracker: sky.tracker(for: id)) else { return }
+        let reticle = Marker(directionRadius: SIMD4(direction.simd, 24), color: SIMD4(0.84, 0.74, 0.57, 1), lightKind: SIMD4(0, 0, 0, 2))
+        encoder.setRenderPipelineState(markerPipeline)
+        setInstances([reticle], on: encoder)
+        encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6, instanceCount: 1)
     }
 
     /// Metal caps inline bytes at 4 KB, so larger per-frame sets get a real buffer.
@@ -736,7 +742,7 @@ final class SkyRenderer: NSObject, MTKViewDelegate {
 
     private func labelColor(_ id: String) -> SIMD4<Float> {
         switch ObjectID(rawValue: id).kind {
-        case .constellation: nightVisibility < 0.5 ? SIMD4(0.90, 0.94, 1.00, 0.8) : SIMD4(0.56, 0.68, 0.84, 0.72)
+        case .constellation: nightVisibility < 0.5 ? SIMD4(0.90, 0.94, 1.00, 0.8) : SIMD4(0.56, 0.68, 0.84, 0.5)
         // Pale text can't read against the Sun's own glare.
         case .body(.sun): nightVisibility < 0.5 ? SIMD4(0.03, 0.07, 0.14, 1) : SIMD4(0.96, 0.92, 0.82, 1)
         case .body: SIMD4(0.96, 0.92, 0.82, 1)

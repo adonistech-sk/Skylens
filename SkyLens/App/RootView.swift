@@ -38,7 +38,8 @@ struct RootView: View {
         .environment(\.theme, theme)
         .tint(theme.accent)
         .preferredColorScheme(.dark)
-        .statusBarHidden(false)
+        // The system clock is white, which night vision exists to avoid.
+        .statusBarHidden(theme.isNightVision)
         .task {
             await services.model.load()
             await services.store.start()
