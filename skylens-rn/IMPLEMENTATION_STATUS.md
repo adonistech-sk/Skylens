@@ -2,7 +2,7 @@
 
 Last updated 2026-11-01. Baseline device: iPhone 17 Simulator, iOS 26.2, on GitHub Actions `macos-26`.
 
-**Everything marked iOS below was verified on commit `787e800`, run 41326574682.** Uncommitted design work in this working tree has had no iOS build. See the last sections.
+**Everything marked iOS below was verified on commit `ff8ab8e`, run 41343346541.** Later commits and uncommitted work in this tree have no iOS evidence yet.
 
 | Status | Meaning |
 |---|---|
@@ -16,12 +16,12 @@ Last updated 2026-11-01. Baseline device: iPhone 17 Simulator, iOS 26.2, on GitH
 
 | Check | Result |
 |---|---|
-| Native iOS build, Expo SDK 58, RN 0.88 | **Passes**, 6 runs of 6 |
-| Typecheck and unit tests | **46 passed** at last local run |
+| Native iOS build, Expo SDK 58, RN 0.88 | **Passes**, 9 runs of 9 |
+| Typecheck and unit tests | Clean, **48 passed** at `ff8ab8e` |
 | JPL Horizons, 378 cases | Worst 36.5″ and 18.1″, identical to Swift |
 | USNO rise, set, twilight, 149 phases, seasons | Passed |
-| Browser flows (`scripts/web-flows.mjs`) | 8 of 8 at last run on committed behaviour |
-| iOS flows, run 41326574682 (`787e800`) | **5 of 5 pass:** search and Find in Sky, Time Travel, location changes Tonight, onboarding and tabs, tap and drag |
+| Browser flows (`scripts/web-flows.mjs`) | 14 of 14 at last run, before `ff8ab8e` |
+| iOS flows, run 41343346541 (`ff8ab8e`) | **5 of 5 pass:** search and Find in Sky, Time Travel, location changes Tonight, onboarding and tabs, tap and drag |
 | iOS screenshots | 12 screens, in `design/ios-baseline/` with side-by-side comparisons |
 
 ## Gates
@@ -46,6 +46,7 @@ Last updated 2026-11-01. Baseline device: iPhone 17 Simulator, iOS 26.2, on GitH
 | Time Travel: forward, play, pause, Now | Tested iOS |
 | Location change alters Tonight | Tested iOS |
 | Onboarding to manual location | Tested iOS up to the sky. **Use Current Location and permission denial untested on iOS** |
+| Deep link during a cold start | **Can be lost.** In screenshot mode the first link of a fresh install lost to the start-up redirect. Normal mode untested |
 | Tonight planner | Tested logic, Tested iOS (rendered) |
 | Events and calendar | Tested logic. Calendar screen is Built |
 | Night vision | Built, not reviewed |
@@ -67,26 +68,21 @@ Last updated 2026-11-01. Baseline device: iPhone 17 Simulator, iOS 26.2, on GitH
 | License items in `ASSET_CREDITS.md` and `../LICENSES.md` | Need a human decision |
 | Merge decision | Work is on `skylens-rn`, not `main` |
 
-## Uncommitted work
+## Design lock work
 
-A separate design session left changes across the renderer, type, screens, motion and images. They are in the working tree only, are not in any commit, and **have no iOS evidence**. Its findings belong in the section it adds below.
-
-## Design lock work (uncommitted, added by the design session)
-
-Web and logic evidence only. **None of this has been built by Xcode or run on iOS.** Details are in `VISUAL_COMPARISON.md`, `TESTING.md`, `ANIMATION_CHECKLIST.md` and `DESIGN_LOCK.md`.
+Committed as `1329019`, with fixes up to `ff8ab8e`. Details are in `VISUAL_COMPARISON.md`, `TESTING.md`, `ANIMATION_CHECKLIST.md` and `DESIGN_LOCK.md`.
 
 | Area | Status |
 |---|---|
-| All ten screens corrected against the references | Tested web (screenshots) |
-| Sky: Orion art, 41,411 catalog stars, Milky Way grade, compass dome | Tested web. Frame rate and start-up cost unmeasured on a device |
-| Tap selection, pan, glide, layers | Tested web. Tap never fired on web before the gesture fix in `SkyView.tsx` |
+| All ten screens corrected against the references | Tested iOS (screenshots). See `design/visual_audit.md` |
+| Sky: Orion art, 41,411 catalog stars, Milky Way grade, compass dome | Tested iOS. Frame rate and start-up cost unmeasured on a device |
+| Tap selection and pan | Tested iOS, flow 05 |
+| Glide and layers | Tested web |
 | Pinch | Built, untested |
 | Daytime and twilight sky with a labelled night preview | Tested web |
-| Framing landscape | Tested web. Artistic layer, not the true horizon, and can be turned off |
-| Paywall pricing slot and honest unavailable state | Unavailable state Tested web. Plan cards Built, because no products load |
+| Framing landscape | Tested iOS (rendered). Artistic layer, not the true horizon, and can be turned off |
+| Paywall pricing slot and honest unavailable state | Unavailable state Tested iOS (screenshot). Plan cards Built, because no products load |
 | Motion system | Tested web by final states. Reduce Motion read in code, not exercised. Of 17 transitions, 4 are partial and 2 are not done: see `ANIMATION_CHECKLIST.md` |
 | Small and large iPhone layouts | Spot-checked on web at 375×667 and 440×956 |
 
-At last run: typecheck clean, 48 of 48 unit tests and 14 of 14 web flows, before the final twilight label change, which had a typecheck and a browser check only.
-
-Needs an owner decision: commit this work so iOS CI can build it.
+At `ff8ab8e`: typecheck clean and 48 of 48 unit tests. The 14 web flows last ran before `ff8ab8e`, which changed no behaviour they cover.

@@ -8,10 +8,10 @@ Machine-readable sources, URLs and verification notes are in `assets/asset-manif
 
 | Screen | File | Source | Credit | License | Edits |
 |---|---|---|---|---|---|
-| Sky, AR, list backdrop | `assets/sky/allsky.jpg`, `assets/images/backdrop.jpg` | NASA SVS Deep Star Maps 2020 (svs.gsfc.nasa.gov/4851) | NASA/Goddard Space Flight Center Scientific Visualization Studio. Gaia DR2: ESA/Gaia/DPAC. | NASA media | Tone-mapped, colour graded, blurred slightly |
+| Sky, AR, list backdrop | `assets/sky/milkyway.jpg`, `assets/images/backdrop.jpg` | NASA SVS Deep Star Maps 2020 (svs.gsfc.nasa.gov/4851). `allsky.jpg` stays as a script input only | NASA/Goddard Space Flight Center Scientific Visualization Studio. Gaia DR2: ESA/Gaia/DPAC. | NASA media | Tone-mapped, median-filtered, keeping brightness. Its pink and indigo are an artistic grade |
 | Onboarding, Time Travel | `earth-onboarding.jpg`, `earth-horizon.jpg` | **Synthesized** by `scripts/render-earth.mjs` from NASA Black Marble and Blue Marble | NASA Earth Observatory images by Joshua Stevens, using Suomi NPP VIIRS data from Miguel Román, NASA GSFC; NASA Earth Observatory | Public domain data | A rendered scene, **not a photograph** |
-| Object Detail | `andromeda-hero.jpg`, `thumb-andromeda.jpg` | Kevin M. Gill, Flickr | "Andromeda Galaxy - January 29 2024" by Kevin M. Gill, licensed under CC BY 2.0 | CC BY 2.0 | Cropped, rotated, stars reduced, colour strengthened |
-| Explore, Tonight | `orion-nebula-hero.jpg`, `thumb-orion-nebula.jpg` | ESA/Hubble | NASA, ESA, M. Robberto (STScI/ESA) and the Hubble Space Telescope Orion Treasury Project Team | CC BY 4.0 | Cropped, colour adjusted |
+| Object Detail | `andromeda-hero.jpg`, `thumb-andromeda.jpg` | noirlab.edu/public/images/noao-m31/ | T.A. Rector and B.A. Wolpa/NOIRLab/NSF/AURA | CC BY 4.0, read from noirlab.edu/public/copyright/ on 2026-11-01 | Rotated 75°, never mirrored, cropped, blue sky pedestal reduced, contrast raised, disc warmed, clipped core tinted warm white |
+| Explore, Tonight | `orion-nebula-hero.jpg`, `thumb-orion-nebula.jpg` | ESA/Hubble | NASA, ESA, M. Robberto (STScI/ESA) and the Hubble Space Telescope Orion Treasury Project Team | CC BY 4.0 | Cropped, colour strengthened, edges darkened. See `scripts/grade-heroes.mjs` |
 | Detail | `pleiades-hero.jpg`, `thumb-pleiades.jpg` | NOIRLab | NOIRLab/NSF/AURA/T.A. Rector (University of Alaska Anchorage), R. Cool (University of Arizona) and WIYN | CC BY 4.0 | Resized, cropped |
 | Detail | `lagoon-hero.jpg`, `thumb-lagoon.jpg` | ESO | ESO | CC BY 4.0 | Resized, cropped |
 | Explore, Detail | `m51-hero.jpg`, `thumb-m51.jpg` | ESA/Hubble | NASA, ESA, S. Beckwith (STScI), and The Hubble Heritage Team (STScI/AURA) | CC BY 4.0 | Resized, cropped |
@@ -24,28 +24,14 @@ Machine-readable sources, URLs and verification notes are in `assets/asset-manif
 | Thumbnails | `planet-mercury.jpg` | Mariner 10 PIA03104 | NASA/JPL | Public domain | Resized. Greyscale half-disc |
 | Thumbnails | `planet-uranus.jpg` | Voyager 2 PIA18182 | NASA/JPL-Caltech | Public domain | Resized |
 | Thumbnails | `planet-neptune.jpg` | Voyager 2 PIA01492 | NASA/JPL | Public domain | Resized. Enhanced colour |
-| Location | `location-mountains.jpg` | National Park Service, Tetons | NPS Photo/A. Falgoust | Public domain | Cropped, colour graded |
-| Sky | `assets/sky/orion-art.jpg` | Generated for SkyLens with Nano Banana 2.1 through Magnific | Project artwork | **Confirm the provider's commercial terms** | Levels adjusted, pinned to real stars |
-| Sky | `assets/sky/horizon.png`, `star-sprite.png` | Drawn by `scripts/make-sky-assets.mjs` | Original | Project-owned | |
-| Screenshot mode only | `ar-standin.jpg` | U.S. Forest Service, Pacific Northwest Region, silhouette over a generated gradient | Public domain | Heavily altered; never shown outside test mode |
-
-## Pending: uncommitted design work
-
-The table above describes the committed app. The working tree holds further image changes from a separate design session, listed here. When that work is committed, these rows replace the matching rows above.
-
-| Item | Change | Credit and license |
-|---|---|---|
-| Andromeda (`andromeda-hero.jpg`, `thumb-andromeda.jpg`) | Replaces the Kevin M. Gill photo. Source: noirlab.edu/public/images/noao-m31/. Rotated 75°, never mirrored, cropped, sky darkened, clipped core tone-mapped, colour strengthened | T.A. Rector and B.A. Wolpa/NOIRLab/NSF/AURA. CC BY 4.0, read from noirlab.edu/public/copyright/ on 2026-11-01 |
-| Sky map (`assets/sky/milkyway.jpg`) | Becomes the bundled map. `allsky.jpg` stays as a script input only. Median-filtered from NASA Deep Star Maps, keeping brightness. Its pink and indigo are an artistic grade | As the star map row above |
-| Location (`location-mountains.jpg`) | Replaces the NPS Tetons photo. **Not a real place** | Generated with Nano Banana 2.1 through Magnific from a crop of the owner's reference. Open question 4 applies |
-| Orion artwork (`assets/sky/orion-art.jpg`) | Regenerated from a crop of the owner's reference. Still pinned to Betelgeuse, Bellatrix and Rigel | As above |
-| Test-mode stand-in (`ar-standin.jpg`) | Replaces the Forest Service silhouette. Test mode only, labelled on screen | As above |
-| `assets/sky/horizon.png` | Still procedural, now also used for the framing landscape | Project-owned |
-| Orion Nebula, Saturn | Same sources and credits. New edits: cropped, colour strengthened, edges darkened for Orion; rotated, cropped, warmed for Saturn. Grades now live in `scripts/grade-heroes.mjs` | Unchanged |
+| Location | `location-mountains.jpg` | Generated with Nano Banana 2.1 through Magnific from a crop of the owner's reference. **Not a real place** | Project artwork | **Confirm the provider's commercial terms** | |
+| Sky | `assets/sky/orion-art.jpg` | Generated with Nano Banana 2.1 through Magnific from a crop of the owner's reference | Project artwork | **Confirm the provider's commercial terms** | Levels adjusted, pinned to Betelgeuse, Bellatrix and Rigel |
+| Sky | `assets/sky/horizon.png`, `star-sprite.png` | Drawn by `scripts/make-sky-assets.mjs` | Original | Project-owned | Horizon also serves as the framing landscape |
+| Screenshot mode only | `ar-standin.jpg` | Generated with Nano Banana 2.1 through Magnific | Project artwork | **Confirm the provider's commercial terms** | Never shown outside test mode, labelled on screen |
 
 ## Fonts
 
-Newsreader and Inter, both SIL Open Font License 1.1, from `@expo-google-fonts`. The spec suggested Instrument Serif, but Newsreader Light was much closer to the reference at side-by-side comparison.
+Newsreader and Inter, both SIL Open Font License 1.1, from `@expo-google-fonts`. The spec suggested Instrument Serif, but Newsreader Regular was much closer to the reference at side-by-side comparison.
 
 ## Rejected
 
@@ -62,4 +48,4 @@ Newsreader and Inter, both SIL Open Font License 1.1, from `@expo-google-fonts`.
 1. **Cassini.** The imaging team's policy site is offline, so clearance rests on general NASA and JPL policy. This is the same credit pattern where MESSENGER and LROC turned out to be restricted, so it isn't fully closed.
 2. **Earth maps.** The commercial-reuse wording came from search results of the policy pages, not a page read directly.
 3. **Outside the US.** NASA says its material is generally not copyrighted "in the United States".
-4. **Orion artwork.** Confirm that AI-generated imagery is acceptable to you commercially and under the provider's plan.
+4. **Generated artwork (Orion, location, test stand-in).** Confirm that AI-generated imagery is acceptable to you commercially and under the provider's plan.
