@@ -29,6 +29,20 @@ Machine-readable sources, URLs and verification notes are in `assets/asset-manif
 | Sky | `assets/sky/horizon.png`, `star-sprite.png` | Drawn by `scripts/make-sky-assets.mjs` | Original | Project-owned | |
 | Screenshot mode only | `ar-standin.jpg` | U.S. Forest Service, Pacific Northwest Region, silhouette over a generated gradient | Public domain | Heavily altered; never shown outside test mode |
 
+## Pending: uncommitted design work
+
+The table above describes the committed app. The working tree holds further image changes from a separate design session, listed here. When that work is committed, these rows replace the matching rows above.
+
+| Item | Change | Credit and license |
+|---|---|---|
+| Andromeda (`andromeda-hero.jpg`, `thumb-andromeda.jpg`) | Replaces the Kevin M. Gill photo. Source: noirlab.edu/public/images/noao-m31/. Rotated 75°, never mirrored, cropped, sky darkened, clipped core tone-mapped, colour strengthened | T.A. Rector and B.A. Wolpa/NOIRLab/NSF/AURA. CC BY 4.0, read from noirlab.edu/public/copyright/ on 2026-11-01 |
+| Sky map (`assets/sky/milkyway.jpg`) | Becomes the bundled map. `allsky.jpg` stays as a script input only. Median-filtered from NASA Deep Star Maps, keeping brightness. Its pink and indigo are an artistic grade | As the star map row above |
+| Location (`location-mountains.jpg`) | Replaces the NPS Tetons photo. **Not a real place** | Generated with Nano Banana 2.1 through Magnific from a crop of the owner's reference. Open question 4 applies |
+| Orion artwork (`assets/sky/orion-art.jpg`) | Regenerated from a crop of the owner's reference. Still pinned to Betelgeuse, Bellatrix and Rigel | As above |
+| Test-mode stand-in (`ar-standin.jpg`) | Replaces the Forest Service silhouette. Test mode only, labelled on screen | As above |
+| `assets/sky/horizon.png` | Still procedural, now also used for the framing landscape | Project-owned |
+| Orion Nebula, Saturn | Same sources and credits. New edits: cropped, colour strengthened, edges darkened for Orion; rotated, cropped, warmed for Saturn. Grades now live in `scripts/grade-heroes.mjs` | Unchanged |
+
 ## Fonts
 
 Newsreader and Inter, both SIL Open Font License 1.1, from `@expo-google-fonts`. The spec suggested Instrument Serif, but Newsreader Light was much closer to the reference at side-by-side comparison.

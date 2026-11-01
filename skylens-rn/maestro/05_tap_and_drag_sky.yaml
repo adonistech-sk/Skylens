@@ -1,0 +1,34 @@
+# Tapping a star selects it, and dragging moves the sky. Betelgeuse's screen position is
+# fixed by the screenshot-mode clock and view.
+appId: sk.skylens.app
+---
+- launchApp
+- runFlow:
+    file: lib/open.yaml
+    env:
+      LINK: skylens://sky
+- extendedWaitUntil:
+    visible:
+      id: sky-search
+    timeout: 20000
+- runFlow:
+    file: lib/settle.yaml
+    env:
+      WAIT: 5000
+- tapOn:
+    point: "31%,37%"
+- extendedWaitUntil:
+    visible:
+      id: sky-selection
+    timeout: 8000
+- assertVisible: ".*Betelgeuse.*"
+- takeScreenshot: flow_tap_selects_star
+- swipe:
+    start: "50%,45%"
+    end: "20%,45%"
+    duration: 800
+- runFlow:
+    file: lib/settle.yaml
+    env:
+      WAIT: 2000
+- takeScreenshot: flow_drag_moved_sky
