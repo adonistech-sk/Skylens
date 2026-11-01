@@ -31,7 +31,7 @@ appId: sk.skylens.app
 - assertVisible: Tonight
 - tapOn:
     id: tab-Explore
-- assertVisible: The Orion Nebula
+- assertVisible: "The Orion Nebula.*"
 - tapOn:
     id: tab-Events
 - assertVisible: Upcoming

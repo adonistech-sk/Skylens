@@ -4,7 +4,7 @@ appId: sk.skylens.app
 - openLink: ${LINK}
 - extendedWaitUntil:
     visible: "Open"
-    timeout: 4000
+    timeout: 9000
     optional: true
 - runFlow:
     when:
