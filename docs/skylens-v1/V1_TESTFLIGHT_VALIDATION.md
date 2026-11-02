@@ -1,6 +1,6 @@
 # SkyLens V1 — Interný TestFlight build pre test na iPhone
 
-Stav k 2026-11-02, 14:22 UTC. Tester s build 1002 ešte nehlásil žiadny výsledok, preto tu nie sú žiadne údaje zo zariadenia.
+Stav k 2026-11-02, 14:22 UTC. Z testu buildu 1002 na iPhone zatiaľ nie sú žiadne výsledky, preto tu nie sú údaje zo zariadenia.
 
 ## Build
 
