@@ -7,7 +7,9 @@ import { constellations, deepSky, namedStars, ObjectType, properName, rememberDe
 import { starIndex, visibleCells } from '../../data/catalogs';
 import { rowOfTile, StarTile } from '../../data/catalogs/deepPack';
 import { CELL_COUNT } from '../../data/catalogs/grid';
+import { artRecord } from '../../data/constellationArt';
 import { Layers, SkyMode } from '../../state/skyModes';
+import { artFrame, skyToPlane } from './artGeometry';
 import { labelAt, PlacedLabel } from './labels';
 
 export interface BodyState {
@@ -180,6 +182,8 @@ export interface HitContext {
   /** Taps below this line land on the compass, not the sky. */
   bottomEdge: number;
   labels: PlacedLabel[];
+  /** Figures the last frame drew. */
+  artwork?: string[];
 }
 
 /**
@@ -239,7 +243,62 @@ export function hitCandidates(x: number, y: number, h: HitContext, radius = 30, 
     const p = project(camera, mul(moment.matrix, d.vec));
     if (p) consider(d.object.id, p.x, p.y, 2);
   }
+  // A figure line or the illustration is itself something to tap. A dense field puts a faint
+  // star near almost any point, so outside the chart the figure comes ahead of those, while a
+  // star that is bright, named, or right under the finger still wins. The chart is for stars.
+  if (radius <= 34 && (!found.length || h.mode !== 'atlas')) {
+    const figure = found.some((f) => f.score === -Infinity) ? null : figureAt(x, y, h);
+    if (figure) found.push({ hit: { id: `con:${figure}`, x, y, distance: 0 }, score: found.length ? FIGURE_SCORE : 0 });
+  }
   return found.sort((a, b) => a.score - b.score).slice(0, limit).map((f) => f.hit);
+}
+
+/** Against a star's distance plus 2.4 per magnitude, less 6 if it has a name. */
+const FIGURE_SCORE = 13;
+
+const inLoop = (loop: number[], x: number, y: number) => {
+  let inside = false;
+  for (let i = 0, j = loop.length - 2; i < loop.length; j = i, i += 2) {
+    if ((loop[i + 1] > y) !== (loop[j + 1] > y) && x < ((loop[j] - loop[i]) * (y - loop[i + 1])) / (loop[j + 1] - loop[i + 1]) + loop[i]) inside = !inside;
+  }
+  return inside;
+};
+
+/** The constellation under a point: within a finger of a drawn line, or on a drawn figure. */
+export function figureAt(x: number, y: number, h: HitContext, reach = 11): string | null {
+  const { camera, moment, field, layers } = h;
+  if (layers.constellations) {
+    const cam = mulMatFast(camera.orientation, moment.matrix);
+    const scale = cameraScale(camera), stereo = camera.projection === 'stereographic';
+    const toScreen = (row: number): [number, number] | null => {
+      const a = row * 3, px = field.xyz[a], py = field.xyz[a + 1], pz = field.xyz[a + 2];
+      const vz = cam[6] * px + cam[7] * py + cam[8] * pz;
+      const k = stereo ? 1 - vz : -vz;
+      if (k <= 1e-3) return null;
+      const s = scale / k;
+      return [camera.width / 2 + (cam[0] * px + cam[1] * py + cam[2] * pz) * s, camera.height / 2 - (cam[3] * px + cam[4] * py + cam[5] * pz) * s];
+    };
+    for (const c of constellationGeometry()) {
+      for (const [a, b] of c.segments) {
+        const p = toScreen(a), q = toScreen(b);
+        if (!p || !q) continue;
+        const dx = q[0] - p[0], dy = q[1] - p[1], len = dx * dx + dy * dy;
+        if (len > 490000 || len === 0) continue;
+        const t = Math.min(1, Math.max(0, ((x - p[0]) * dx + (y - p[1]) * dy) / len));
+        if (Math.hypot(p[0] + dx * t - x, p[1] + dy * t - y) <= reach) return c.id;
+      }
+    }
+  }
+  if (!h.artwork?.length) return null;
+  const sky = mul(transpose(moment.matrix), unproject(camera, x, y));
+  for (const id of h.artwork) {
+    const art = artRecord(id);
+    if (!art) continue;
+    const [px, py] = skyToPlane(artFrame(art), sky);
+    if (Math.hypot(px, py) > art.radius) continue;
+    if (art.contour.some((l) => inLoop(l, px, py))) return id;
+  }
+  return null;
 }
 
 export function mulMatFast(a: Mat3, b: Mat3): Mat3 {

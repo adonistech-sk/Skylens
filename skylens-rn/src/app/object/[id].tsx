@@ -18,6 +18,7 @@ import { heroFor } from '../../design/images';
 import { ObjectThumb } from '../../design/Screen';
 import { color, font, type } from '../../design/tokens';
 import { AltitudeChart } from '../../features/detail/AltitudeChart';
+import { ConstellationStory } from '../../features/detail/ConstellationStory';
 import { AddToList } from '../../features/lists/AddToList';
 import { SkyView } from '../../features/sky/SkyView';
 import { formatDec, formatDistanceAU, formatDistanceLy, formatLongDate, formatMagnitude, formatRA, formatSize, formatTime } from '../../state/format';
@@ -59,6 +60,7 @@ export default function ObjectDetail() {
   const [tab, setTab] = useState<'overview' | 'observing' | 'details'>('overview');
   const { object: o, loading } = useObject(id);
   const [adding, setAdding] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const date = new Date(skyTime());
   const minute = Math.floor(date.getTime() / 60000);
   const info = useMemo(() => (o ? observe(o, date, observer) : null), [o?.id, observer, minute]);
@@ -115,12 +117,15 @@ export default function ObjectDetail() {
           : <SkyView key={o.id} interactive={false} showCompass={false} hideGround focusId={o.id} bottomInset={150} initial={{ fov: o.type === 'constellation' ? 42 : 24 }} />}
         <LinearGradient pointerEvents="none" colors={['rgba(6,10,20,0.35)', 'rgba(6,10,20,0)', 'rgba(6,10,20,0)', color.base]} locations={[0, 0.22, 0.52, 0.9]} style={StyleSheet.absoluteFill} />
       </View>
-      <ScrollView contentContainerStyle={{ paddingTop: 262, paddingBottom: 128 + insets.bottom }} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={{ paddingTop: 262, paddingBottom: 128 + insets.bottom }} showsVerticalScrollIndicator={false} scrollEventThrottle={64}
+        onScroll={(e) => { const over = e.nativeEvent.contentOffset.y > 170; if (over !== scrolled) setScrolled(over); }}>
         <Reveal style={styles.titleBlock}>
           {designation ? <View style={styles.pill}><Text style={styles.pillText}>{designation}</Text></View> : null}
           <Text style={styles.title} accessibilityRole="header">{o.name}</Text>
           <Text style={styles.subtitle}>{kindLine(o)}{distance ? ` · ${distance}` : ''}</Text>
         </Reveal>
+        {/* An opaque sheet, so a long story never runs over the live sky behind it. */}
+        <View style={styles.sheet}>
         <SegmentedControl solid style={styles.segments} value={tab} onChange={setTab}
           options={[{ value: 'overview', label: 'Overview' }, { value: 'observing', label: 'Observing' }, { value: 'details', label: 'Details' }]} />
         {tab === 'overview' ? (
@@ -131,6 +136,7 @@ export default function ObjectDetail() {
               <Cell line icon="size" label={size ? 'Size (apparent)' : 'Distance'} value={size ?? (ly ? `${Math.round(ly).toLocaleString('en-US')} ly` : '—')} />
               <Cell line icon="diamond" label="Constellation" value={place} />
             </View>
+            {o.type === 'constellation' ? <ConstellationStory id={o.id.slice(4)} /> : null}
             {bodyId && bodyId !== 'moon' ? <Row testID="detail-3d" title="Explore in 3D" subtitle="Turn it in the Solar System" onPress={() => router.push({ pathname: '/solar-system', params: { focus: bodyId } })} /> : null}
             {bodyId === 'moon' ? <Row testID="detail-3d" title="Explore in 3D" subtitle="The Moon and Earth, true to scale" onPress={() => router.push({ pathname: '/solar-system', params: { focus: 'moon' } })} /> : null}
             {bodyId === 'moon' ? <Row testID="detail-atlas" title="Moon Atlas" subtitle="Explore its surface" last onPress={() => router.push('/moon-atlas')} /> : null}
@@ -174,8 +180,10 @@ export default function ObjectDetail() {
             {editorial?.learn ? <Text style={[styles.copy, { marginTop: 14 }]}>{editorial.learn}</Text> : null}
           </View>
         )}
+        </View>
       </ScrollView>
 
+      {scrolled ? <LinearGradient pointerEvents="none" colors={[color.base, color.base, 'rgba(6,10,20,0)']} locations={[0, 0.7, 1]} style={[styles.topFade, { height: insets.top + 74 }]} /> : null}
       <View style={[styles.topBar, { top: insets.top + 8 }]} pointerEvents="box-none">
         <IconButton name="back" label="Back" glass={false} onPress={() => (router.canGoBack() ? router.back() : router.replace('/sky'))} iconSize={24} />
         <View style={{ flex: 1 }} />
@@ -203,6 +211,8 @@ const styles = StyleSheet.create({
   pillText: { fontFamily: font.medium, fontSize: 12, color: color.text },
   title: type.objectTitle,
   subtitle: { ...type.body, color: color.text, marginTop: 8, fontSize: 15 },
+  sheet: { backgroundColor: color.base, minHeight: 420 },
+  topFade: { position: 'absolute', top: 0, left: 0, right: 0 },
   segments: { marginHorizontal: 22, marginTop: 16 },
   section: { paddingHorizontal: 26, marginTop: 16 },
   copy: { fontFamily: font.regular, fontSize: 15, lineHeight: 22, color: color.text },

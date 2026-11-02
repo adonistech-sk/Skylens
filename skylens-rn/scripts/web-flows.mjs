@@ -88,7 +88,7 @@ await flow('the layer panel changes the sky, including the framing landscape', a
   await id(p, 'sky-layers').click();
   await visible(text(p, 'Landscape framing (artistic)'));
   await p.getByRole('switch', { name: 'Landscape framing (artistic)' }).click();
-  await p.getByRole('switch', { name: 'Orion artwork' }).click();
+  await p.getByRole('switch', { name: 'Constellation artwork' }).click();
   await id(p, 'sky-layers').click();
   await p.waitForTimeout(2000);
   if (before === await skyPixels(p)) throw new Error('layers did not change the sky');
@@ -257,7 +257,7 @@ async function layerChanges(p, name) {
 await flow('no inert layers: every switch in the Deep Atlas panel changes the picture', async (p) => {
   await skyReady(p);
   await id(p, 'segment-atlas').click();
-  for (const name of ['Stars', 'Milky Way', 'Atmosphere', 'Deep sky objects', 'Clusters', 'Nebulae', 'Constellations', 'Boundaries', 'Labels', 'Equatorial (J2000)', 'Horizontal (altitude, azimuth)', 'Ecliptic', 'Galactic']) await layerChanges(p, name);
+  for (const name of ['Stars', 'Milky Way', 'Atmosphere', 'Deep sky objects', 'Clusters', 'Nebulae', 'Constellation lines', 'Constellation names', 'Boundaries', 'All labels', 'Equatorial (J2000)', 'Horizontal (altitude, azimuth)', 'Ecliptic', 'Galactic']) await layerChanges(p, name);
   // The horizon is only in view low down, so drag the sky to it first.
   await p.mouse.move(200, 620);
   await p.mouse.down();
@@ -287,7 +287,7 @@ await flow('no inert layers: planets and galaxies, where they can be seen', asyn
 
 await flow('no inert layers: artwork and framing in Explore', async (p) => {
   await skyReady(p);
-  await layerChanges(p, 'Orion artwork');
+  await layerChanges(p, 'Constellation artwork');
   await layerChanges(p, 'Landscape framing (artistic)');
 });
 
@@ -631,7 +631,7 @@ await flow('the arrows step through what is in view, and a name selects a conste
   await p.reload({ waitUntil: 'load' });
   await visible(id(p, 'sheet-handle'));
   await p.waitForTimeout(7000);
-  await id(p, 'sky-canvas').click({ position: { x: 125, y: 421 } });
+  await id(p, 'sky-canvas').click({ position: { x: 95, y: 441 } });
   await visible(text(p, 'Constellation ·'));
 });
 

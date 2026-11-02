@@ -20,6 +20,7 @@ SkyLens has no third-party Swift packages. The SGP4 code was written for this pr
 | Messier table | NASA HEASARC | US Government work, likely public domain | **Review:** confirm |
 | IAU Catalog of Star Names | IAU WGSN | Credit required, per the file's header | Credit in app |
 | Constellation figures and boundaries | d3-celestial, Olaf Frohn | BSD-3-Clause | Notice shipped |
+| Constellation artwork | Original to this project, authored by Claude as vector figures | Project artwork | No image generator, stock or third-party art. See `docs/skylens-v1/V1_DECISION_LOG.md` |
 | Magellanic Cloud values | Published measurements | Facts | No action |
 | Meteor shower parameters | IMO Working List, entered by hand | Facts | Values not re-checked against the current list: **verify** |
 | Editorial text (`editorial.json`) | Written for SkyLens | Project-owned | No action. Facts need a human fact-check |

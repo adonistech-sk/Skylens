@@ -4,7 +4,7 @@
 import { Camera, project } from '../../astronomy/camera';
 import { compass16, equatorialVector, mul, Vec3, vectorHorizontal } from '../../astronomy/core';
 import { washedOut } from '../../astronomy/locator';
-import { bodyIdOf, namedStars, object, SkyObject, starObject, TYPE_NAMES } from '../../data/catalog';
+import { bodyIdOf, constellationObject, constellations, namedStars, object, SkyObject, starObject, TYPE_NAMES } from '../../data/catalog';
 import { Layers, SkyMode } from '../../state/skyModes';
 import { SkyMoment, visibleDeepSky } from './scene';
 
@@ -78,5 +78,30 @@ export function discover(c: DiscoveryContext, max = 6, inViewOnly = false): Sugg
     if (mode !== 'atlas' && !d.object.deepSky?.messier && !d.object.designations.length) continue;
     consider(d.object, mul(moment.matrix, d.vec), d.object.magnitude, d.object.deepSky?.messier ? 1.5 : 0.5);
   }
-  return found.sort((a, b) => b.rank - a.rank).slice(0, max);
+  const list = found.sort((a, b) => b.rank - a.rank).slice(0, max);
+  // The constellation nearest the middle of the view leads the panel, where it can tell its
+  // story. It stays out of the step arrows, which walk from point to point.
+  if (!inViewOnly && brightness < 0.42 && (layers.constellations || layers.artwork)) {
+    const figure = figureInView(c);
+    if (figure) return [figure, ...list].slice(0, max);
+  }
+  return list;
+}
+
+function figureInView(c: DiscoveryContext): Suggestion | null {
+  const { camera, moment } = c;
+  let best: { object: SkyObject; dir: Vec3; dist: number } | null = null;
+  for (const con of constellations) {
+    const o = constellationObject(con);
+    const dir = mul(moment.matrix, equatorialVector(o.position!.raHours, o.position!.decDeg));
+    const h = vectorHorizontal(dir);
+    if (h.altitude < 8) continue;
+    const p = project(camera, dir);
+    if (!p || p.x < 0 || p.x > camera.width || p.y < c.topEdge || p.y > c.bottomEdge) continue;
+    const dist = Math.hypot(p.x - camera.width / 2, p.y - camera.height / 2);
+    if (!best || dist < best.dist) best = { object: o, dir, dist };
+  }
+  if (!best) return null;
+  const h = vectorHorizontal(best.dir);
+  return { object: best.object, altitude: h.altitude, azimuth: h.azimuth, magnitude: null, inView: true, reason: `Constellation · In view · ${Math.round(h.altitude)}° high`, rank: 1000 };
 }

@@ -1,0 +1,53 @@
+# The constellation experience on iOS: a figure's Story, its guided tour, and the layer switches.
+# Written for the next iOS run. It has not run yet.
+appId: sk.skylens.app
+---
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: sky-search
+    timeout: 90000
+- runFlow:
+    file: lib/settle.yaml
+    env:
+      WAIT: 6000
+- takeScreenshot: flow_constellation_art_opening
+- runFlow:
+    file: lib/open.yaml
+    env:
+      LINK: skylens://object/con:Ori
+- extendedWaitUntil:
+    visible:
+      id: constellation-story
+    timeout: 20000
+- runFlow:
+    file: lib/settle.yaml
+    env:
+      WAIT: 3000
+- takeScreenshot: flow_constellation_story
+- tapOn:
+    id: detail-tour
+- extendedWaitUntil:
+    visible:
+      id: tour-card
+    timeout: 20000
+- runFlow:
+    file: lib/settle.yaml
+    env:
+      WAIT: 3000
+- takeScreenshot: flow_tour_first_stop
+- tapOn:
+    id: tour-next
+- runFlow:
+    file: lib/settle.yaml
+    env:
+      WAIT: 3000
+- takeScreenshot: flow_tour_second_stop
+- tapOn:
+    id: tour-exit
+- tapOn:
+    id: sky-layers
+- extendedWaitUntil:
+    visible: "Constellation artwork"
+    timeout: 8000
+- takeScreenshot: flow_constellation_layers

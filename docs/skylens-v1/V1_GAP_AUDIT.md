@@ -183,3 +183,13 @@ Evidence is logic tests and web flows on Windows. Nothing here has run on iOS, s
 | J01 Identify | `PARTIAL` | List and favorites added | Compass on hardware |
 | J02 Constellation | `PARTIAL` | Highlight, boundary, related stars | Art for 87 constellations, story |
 | J03 Deep Atlas search | `PARTIAL` | Search reaches every star, faint star routes to Deep Atlas at a view that draws it | FOV overlay, Stage 5 |
+
+## After Stage 4 (2026-11-02)
+
+| ID | Status now | Evidence | Still open |
+|---|---|---|---|
+| SKY-004 Lines, boundaries, art | `VERIFIED_IMPLEMENTED` on web | 86 of 88 figures, `V1_CONSTELLATION_MATRIX.md`, anchoring measured in `tests/constellations-v1.test.ts` and in the running app | Corona Borealis and Puppis have no figure. `DEVICE_NOT_TESTED` |
+| SKY-007 Layer manager | `PARTIAL` | Independent lines, names, art, animation, opacity | Satellites and orbit trails wait for their data |
+| GUIDE-002 Constellation Stories | `PARTIAL` | 88 stories, science, history and traditions apart, attributed | About 47 claims source-checked, the rest not individually |
+| GUIDE-001 Tours | `PARTIAL` | Guided constellation tours for all 88, 12 written | Tonight, Planets and Messier tours, saved progress |
+| J02 Constellation | `VERIFIED_IMPLEMENTED` on web | Tap a figure, reveal, story, tour, return to the same sky | `DEVICE_NOT_TESTED` |

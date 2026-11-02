@@ -8,6 +8,7 @@ import { altitude, vectorHorizontal } from '../astronomy/core';
 import { directionOf, locate } from '../astronomy/locator';
 import { guidance, horizontalOf } from '../astronomy/observing';
 import { object } from '../data/catalog';
+import { tourFor } from '../data/constellationTours';
 import { deepPack, ensureObject, onDeepPackChange } from '../data/catalogs/runtime';
 import { IconButton, SegmentedControl, TabBar } from '../design/components';
 import { Tap } from '../design/motion';
@@ -23,9 +24,10 @@ import { SelectionCard } from '../features/sky/SelectionCard';
 import { SkyContextMenu } from '../features/sky/SkyContextMenu';
 import { SkySheet } from '../features/sky/SkySheet';
 import { SkyHandle, SkyPoint, SkyView } from '../features/sky/SkyView';
+import { TourCard } from '../features/sky/TourCard';
 import { DEMO_MODE } from '../state/demo';
 import { MODE_LABELS, SkyMode } from '../state/skyModes';
-import { getState, requestFocus, select, setNightPreview, setSkyMode, skyTime, useObserver, useStore } from '../state/store';
+import { getState, requestFocus, select, setNightPreview, setSkyMode, setTour, skyTime, useObserver, useStore } from '../state/store';
 
 const MODES: { value: SkyMode; label: string }[] = (['observe', 'explore', 'atlas'] as SkyMode[]).map((value) => ({ value, label: MODE_LABELS[value] }));
 
@@ -136,9 +138,14 @@ export default function SkyScreen() {
     setMenu(p);
   };
 
-  const card = (inline: boolean) => (selected && location ? (
+  // A tour lasts as long as its stop stays selected. Choosing anything else leaves it.
+  const tour = useStore((s) => s.tour);
+  const stopId = tour ? tourFor(tour.id)?.stops[tour.index]?.id ?? null : null;
+  useEffect(() => { if (tour && selection !== null && selection !== stopId) setTour(null); }, [selection]);
+
+  const card = (inline: boolean) => (selected && location ? (tour && selection === stopId ? <TourCard constellation={tour.id} index={tour.index} object={selected} location={location} guide={guide} inline={inline} /> : (
     <SelectionCard object={selected} location={location} guide={guide} tooFaint={tooFaint} inline={inline} onStep={canStep ? step : undefined} onAddToList={() => setAdding(true)} />
-  ) : null);
+  )) : null);
 
   // Reported only in Deep Atlas, the one place the pack is used.
   const [packNote, setPackNote] = useState<string | null>(null);

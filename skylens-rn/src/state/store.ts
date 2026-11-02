@@ -55,6 +55,8 @@ interface State extends Persisted {
   nightPreview: boolean;
   /** Bumped when deep stars become resolvable, so lists that hold them redraw. */
   catalogRevision: number;
+  /** The guided constellation tour in progress. */
+  tour: { id: string; index: number } | null;
 }
 
 const KEY = 'skylens.user.v1';
@@ -78,6 +80,7 @@ const initial: State = {
   focus: null,
   nightPreview: false,
   catalogRevision: 0,
+  tour: null,
 };
 
 let state = initial;
@@ -136,6 +139,7 @@ export const setSkyMode = (skyMode: SkyMode) => set({ skyMode, layers: state.mod
 export const setDensity = (density: number) => patchMode({ density });
 export const setMagnitudeCap = (magnitudeCap: number) => patchMode({ magnitudeCap });
 export const setLabelDensity = (labelDensity: number) => patchMode({ labelDensity });
+export const setArtworkOpacity = (artworkOpacity: number) => patchMode({ artworkOpacity });
 export const resetSkyMode = () => patchMode({ ...MODE_DEFAULTS[state.skyMode] });
 export const setFlag = (key: keyof Flags, value: boolean) => {
   // Turning the modes off returns to today's sky rather than stranding a chart on screen.
@@ -148,6 +152,7 @@ export const setNightVision = (nightVision: boolean) => set({ nightVision }, tru
 export const setNightPreview = (nightPreview: boolean) => set({ nightPreview });
 export const setProActive = (proActive: boolean) => set({ proActive });
 export const select = (selection: string | null) => set({ selection });
+export const setTour = (tour: { id: string; index: number } | null) => set({ tour });
 
 export function toggleFavorite(id: string) {
   const has = state.favorites.includes(id);

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, LayoutChangeEvent, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSharedValue, withTiming } from 'react-native-reanimated';
-import { angleBetween, Horizontal, Mat3, vectorHorizontal, Vec3 } from '../../astronomy/core';
+import { altitude, angleBetween, Horizontal, Mat3, vectorHorizontal, Vec3 } from '../../astronomy/core';
 import { anchorView, Camera, dragView, flight, flightDuration, focusView, FOV_RANGE, framingFov, lowestView, orientationFor, pointsPerDegree, project, Projection, unproject, ViewState } from '../../astronomy/camera';
 import { directionOf } from '../../astronomy/locator';
 import { directionAt, object, stars } from '../../data/catalog';
@@ -12,10 +12,14 @@ import { deepPack, onDeepPackChange } from '../../data/catalogs/runtime';
 import { DEEP_PACK } from '../../data/generated/deepPack';
 import { DEMO_MODE } from '../../state/demo';
 import { BUNDLED_LIMIT, Layers, MODE_DEFAULTS, SkyMode, starLimit } from '../../state/skyModes';
-import { getState, select, skyTime, useObserver, useStore } from '../../state/store';
+import { getState, requestFocus, select, setSkyTime, skyTime, useObserver, useStore } from '../../state/store';
+import { artRecord } from '../../data/constellationArt';
+import { anchorError, meshFor, Presence } from './artGeometry';
+import { newArtState } from './artwork';
+import { onArtTexture } from './artTextures';
 import { now, recordFrame } from './perf';
 import { emptyResult, frameBrightness, makeEffect, renderFrame, SELECTION_SETTLE, SkyResources } from './renderer';
-import { buildStarField, computeMoment, constellationSpan, hitCandidates, HitContext, hitTest, newCellBuffer, querySky, SkyMoment, StarField, yearsSinceJ2000 } from './scene';
+import { buildStarField, computeMoment, constellationSpan, hitCandidates, HitContext, hitTest, mulMatFast, newCellBuffer, querySky, SkyMoment, StarField, yearsSinceJ2000 } from './scene';
 
 export interface SkyHandle {
   /** The object nearest the centre of the view. */
@@ -77,7 +81,6 @@ export function SkyView({
   const skyMap = useImage(require('../../../assets/sky/milkyway.jpg'));
   const horizon = useImage(require('../../../assets/sky/horizon.png'));
   const sprite = useImage(require('../../../assets/sky/star-sprite.png'));
-  const orionArt = useImage(require('../../../assets/sky/orion-art.jpg'));
   const labelFont = useFont(require('../../../assets/sky/Inter-Medium.ttf'), 13.5);
   const smallFont = useFont(require('../../../assets/sky/Inter-Medium.ttf'), 11);
   const trackedFont = useFont(require('../../../assets/sky/Inter-Medium.ttf'), 14);
@@ -86,9 +89,8 @@ export function SkyView({
     if (!skyMap || !horizon || !sprite || !labelFont || !smallFont || !trackedFont || !headingFont) return null;
     return {
       effect: makeEffect(), skyMap, horizon, sprite, labelFont, smallFont, trackedFont, headingFont,
-      artwork: orionArt ? { image: orionArt, anchors: ORION_ANCHORS, opacity: 0.74 } : null,
     };
-  }, [skyMap, horizon, sprite, labelFont, smallFont, trackedFont, headingFont, orionArt]);
+  }, [skyMap, horizon, sprite, labelFont, smallFont, trackedFont, headingFont]);
   useEffect(() => { if (resources) sharedResources.current = resources; }, [resources]);
 
   const picture = useSharedValue<SkPicture>(emptyPicture());
@@ -111,6 +113,11 @@ export function SkyView({
   const cells = useRef(newCellBuffer());
   const lastFrame = useRef<HitContext | null>(null);
   const pinchAnchor = useRef<Vec3 | null>(null);
+  const animating = useRef(false);
+  /** Screenshot mode only: holds the selection clock, to capture a moment of an animation. */
+  const heldAge = useRef<number | null>(null);
+  const artState = useRef(newArtState());
+  const nameFades = useRef(new Presence(3.2));
 
   const observer = useObserver();
   const layers = useStore((s) => s.layers);
@@ -230,10 +237,11 @@ export function SkyView({
       camera: cam, moment, field, layers, selection: focusId ? (markFaint ? focusId : null) : sel, selectionDir: focusId ? (markFaint ? directionOf(focused, new Date(moment.time), observer) : null) : selectionDir.current,
       chart: { mode, settings, limit, query, readout: mode === 'atlas' && showCompass }, result, selectionName: focusId ? null : obj?.name ?? null,
       moving: isMoving, overlayOnly, bottomInset, topInset, showCompass, nightVision: state.nightVision,
-      selectionAge: reduceMotion.current ? SELECTION_SETTLE : selectionAge, nightPreview: state.nightPreview,
+      selectionAge: heldAge.current ?? (reduceMotion.current ? SELECTION_SETTLE : selectionAge), nightPreview: state.nightPreview,
       framing: !hideGround && !overlayOnly && showCompass && layers.ground && layers.framing,
+      art: artState.current, names: nameFades.current, now: Date.now() / 1000, motion: layers.constellationMotion && !reduceMotion.current,
     }, resources);
-    lastFrame.current = { camera: cam, moment, field, layers, mode, limit, brightness, overlayOnly, query, bottomEdge: size.current.height - bottomInset, labels: result.labels };
+    lastFrame.current = { camera: cam, moment, field, layers, mode, limit, brightness, overlayOnly, query, bottomEdge: size.current.height - bottomInset, labels: result.labels, artwork: result.artwork };
     if (!embedded) {
       const base = stars().count;
       recordFrame(now() - started, { indexed: base + (state.flags.deepPack ? DEEP_PACK.stars : 0), loaded: base + (pack?.loadedStars ?? 0), scanned: result.scanned, drawn: result.drawn, limit });
@@ -241,7 +249,8 @@ export function SkyView({
     if (rememberView) rememberedView = view.current;
     onViewChange?.(view.current);
     const settling = !!sel && !reduceMotion.current && selectionAge < SELECTION_SETTLE;
-    if (flightState.current || orientationRef || glide.current || settling) schedule();
+    animating.current = result.animating;
+    if (flightState.current || orientationRef || glide.current || settling || result.animating) schedule();
   };
 
   const latestDraw = useRef(draw);
@@ -262,6 +271,7 @@ export function SkyView({
   }, []);
   useEffect(() => { schedule(); }, [resources, layers, selection, nightVision, nightPreview, observer, layoutTick, skyMode, modes, flags]);
   useEffect(() => onDeepPackChange(() => drawRef.current()), []);
+  useEffect(() => onArtTexture(() => drawRef.current()), []);
 
   // The old sky fades out over the new one. Objects stay put, so only the extras change.
   const firstMode = useRef(true);
@@ -309,6 +319,33 @@ export function SkyView({
         return dir ? project(camera(), dir) : null;
       },
       limit: () => lastFrame.current?.limit ?? null,
+      artwork: () => lastFrame.current?.artwork ?? [],
+      animating: () => animating.current,
+      hold: (age: number | null) => { heldAge.current = age; artState.current.last = 0; schedule(); },
+      time: (ms: number) => { setSkyTime(ms); schedule(); },
+      /** Worst distance in points between each figure on screen and its anchor stars, this frame. */
+      anchors: () => {
+        const last = lastFrame.current;
+        if (!last) return null;
+        const cam = mulMatFast(last.camera.orientation, last.moment.matrix);
+        return Object.fromEntries((last.artwork ?? []).map((id) => { const art = artRecord(id)!; return [id, anchorError(art, meshFor(art, last.field), last.field, last.camera, cam)]; }));
+      },
+      /** Moves the clock to a night when a constellation is high, then flies to it. */
+      show: (id: string, fov?: number) => {
+        const target = object(`con:${id}`);
+        if (!target) return null;
+        let best = { time: skyTime(), height: -90 };
+        for (let hour = 0; hour < 24 * 366; hour += 7) {
+          const time = Date.parse('2027-01-01T00:30:00Z') + hour * 3_600_000, date = new Date(time);
+          if (altitude('sun', date, observer) > -14) continue;
+          const dir = directionOf(target, date, observer);
+          const height = dir ? vectorHorizontal(dir).altitude : -90;
+          if (height > best.height) best = { time, height };
+        }
+        setSkyTime(best.time);
+        requestFocus(`con:${id}`, fov);
+        return best;
+      },
     };
   }
 
@@ -400,9 +437,6 @@ const orientationCentre = (v: ViewState): Vec3 => {
   const a = (v.azimuth * Math.PI) / 180, h = (v.altitude * Math.PI) / 180;
   return [Math.cos(h) * Math.cos(a), -Math.cos(h) * Math.sin(a), Math.sin(h)];
 };
-
-/** Pixels in assets/sky/orion-art.jpg pinned to the raised shoulder, far shoulder and knee. */
-const ORION_ANCHORS = { betelgeuse: [194, 522] as [number, number], bellatrix: [622, 656] as [number, number], rigel: [804, 1344] as [number, number] };
 
 let blank: SkPicture | null = null;
 /** A picture that draws nothing, for the frames before the sky is ready. */

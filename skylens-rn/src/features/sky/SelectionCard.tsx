@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { TYPE_NAMES } from '../../data/catalog';
+import { tourFor } from '../../data/constellationTours';
 import type { SkyObject } from '../../data/catalog';
 import type { ObjectLocation } from '../../astronomy/locator';
 import { press } from '../../design/components';
@@ -8,6 +9,7 @@ import { Icon } from '../../design/Icon';
 import { color, font, type } from '../../design/tokens';
 import { fovForMagnitude, MODE_LABELS } from '../../state/skyModes';
 import { requestFocus, select, setSkyMode, toggleFavorite, useStore } from '../../state/store';
+import { beginTour } from './tour';
 
 interface Props {
   object: SkyObject;
@@ -35,6 +37,7 @@ function Action({ testID, icon, label, a11y, onPress, filled }: { testID: string
 export function SelectionCard({ object: o, location, guide, tooFaint, onStep, onAddToList, inline }: Props) {
   const favorite = useStore((s) => s.favorites.includes(o.id));
   const open = () => router.push({ pathname: '/object/[id]', params: { id: o.id } });
+  const tour = o.type === 'constellation' ? tourFor(o.id.slice(4)) : null;
   const showDeep = () => {
     setSkyMode('atlas');
     requestFocus(o.id, o.magnitude !== null ? fovForMagnitude(o.magnitude) : undefined);
@@ -53,6 +56,11 @@ export function SelectionCard({ object: o, location, guide, tooFaint, onStep, on
       {tooFaint ? (
         <Pressable testID="sky-show-atlas" onPress={showDeep} style={({ pressed }) => [styles.faint, press(pressed)]} accessibilityRole="button" accessibilityLabel={`Too faint for this view. Show in ${MODE_LABELS.atlas}.`}>
           <Text style={styles.faintText}>Too faint for this view · Show in {MODE_LABELS.atlas}</Text>
+        </Pressable>
+      ) : null}
+      {tour ? (
+        <Pressable testID="sky-tour" onPress={() => beginTour(o.id.slice(4))} style={({ pressed }) => [styles.faint, press(pressed)]} accessibilityRole="button" accessibilityLabel={`Start a guided tour of ${o.name}, ${tour.stops.length} stops`}>
+          <Text style={styles.faintText}>Guided exploration · {tour.stops.length} stops</Text>
         </Pressable>
       ) : null}
       <View style={styles.actions}>

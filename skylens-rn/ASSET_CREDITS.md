@@ -25,7 +25,8 @@ Machine-readable sources, URLs and verification notes are in `assets/asset-manif
 | Thumbnails | `planet-uranus.jpg` | Voyager 2 PIA18182 | NASA/JPL-Caltech | Public domain | Resized |
 | Thumbnails | `planet-neptune.jpg` | Voyager 2 PIA01492 | NASA/JPL | Public domain | Resized. Enhanced colour |
 | Location | `location-mountains.jpg` | Generated with Nano Banana 2.1 through Magnific from a crop of the owner's reference. **Not a real place** | Project artwork | **Confirm the provider's commercial terms** | |
-| Sky | `assets/sky/orion-art.jpg` | Generated with Nano Banana 2.1 through Magnific from a crop of the owner's reference | Project artwork | **Confirm the provider's commercial terms** | Levels adjusted, pinned to Betelgeuse, Bellatrix and Rigel |
+| Unused since Stage 4 | `assets/sky/orion-art.jpg` | Generated with Nano Banana 2.1 through Magnific from a crop of the owner's reference | Project artwork | **No longer bundled.** Confirm the provider's commercial terms only if it returns | Levels adjusted, pinned to Betelgeuse, Bellatrix and Rigel |
+| Sky | `assets/constellation-art/*.jpg`, 86 figures | Authored by Claude as vector figures in `scripts/constellation-art/figures/`, printed by `scripts/constellation-art/engrave.mjs` | Project artwork | No image generator, stock or third-party art. AI authorship noted in the decision log | Original |
 | Sky | `assets/sky/horizon.png`, `star-sprite.png` | Drawn by `scripts/make-sky-assets.mjs` | Original | Project-owned | Horizon also serves as the framing landscape |
 | Screenshot mode only | `ar-standin.jpg` | Generated with Nano Banana 2.1 through Magnific | Project artwork | **Confirm the provider's commercial terms** | Never shown outside test mode, labelled on screen |
 

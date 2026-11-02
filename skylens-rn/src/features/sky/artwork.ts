@@ -1,65 +1,134 @@
-// An optional artistic Orion figure, drawn on top of the true sky. The image is never
-// a position source: three of its pixels are pinned to Betelgeuse, Bellatrix and Rigel,
-// and it is warped with an affine transform so it follows them for any date, place and
-// view. Stars and lines are always drawn from the catalog on top.
-import { BlendMode, FilterMode, MipmapMode, SkCanvas, SkImage, Skia } from '@shopify/react-native-skia';
-import { Camera, cameraScale } from '../../astronomy/camera';
-import { Mat3 } from '../../astronomy/core';
-import { stars } from '../../data/catalog';
-import { StarField } from './scene';
+// Draws constellation illustrations on top of the true sky. A plate is never a position source:
+// it reaches the screen through the mesh in artGeometry, the same camera the stars use. Stars and
+// lines are drawn from the catalog afterwards, so they always sit over the figure.
+import { BlendMode, PaintStyle, SkCanvas, SkPaint, Skia, SkPoint, vec, VertexMode } from '@shopify/react-native-skia';
+import { Camera, unproject } from '../../astronomy/camera';
+import { Mat3, mul, transpose, Vec3 } from '../../astronomy/core';
+import { artRecord } from '../../data/constellationArt';
+import { ArtMesh, chooseArtworks, meshFor, parallaxOffset, Presence, projectAll } from './artGeometry';
+import { artTexture } from './artTextures';
+import { RevealState } from './figures';
+import { viewHalfAngle } from './scene';
 
-export interface OrionArtwork {
-  image: SkImage;
-  /** Pixel positions in the artwork of the three pinned stars. */
-  anchors: { betelgeuse: [number, number]; bellatrix: [number, number]; rigel: [number, number] };
+export { artworkFade } from './artFade';
+
+/** Kept by each sky view, so a detail hero and the main map never share a fade. */
+export interface ArtState { presence: Presence; last: number; shown: string[] }
+export const newArtState = (): ArtState => ({ presence: new Presence(2.4), last: 0, shown: [] });
+
+export interface ArtFrame {
+  camera: Camera;
+  /** J2000 to camera. */
+  cam: Mat3;
+  /** J2000 to horizon. */
+  matrix: Mat3;
+  field: { years: number; xyz: Float32Array };
+  /** Night fade and the user's slider, multiplied. */
   opacity: number;
+  chosen: string | null;
+  /** The chosen figure's unfolding. */
+  reveal: RevealState;
+  motion: boolean;
+  now: number;
+  state: ArtState;
 }
 
-const HIP = { betelgeuse: 27989, bellatrix: 25336, rigel: 24436 };
+let platePaint: SkPaint | null = null;
+let glowPaint: SkPaint | null = null;
+let tracePaint: SkPaint | null = null;
+let buffer = new Float32Array(1024);
+/** Glow coordinates never change, so they are worked out once for each figure. */
+const glowUvs = new Map<string, SkPoint[]>();
 
-/**
- * The body of the figure. With the artwork on, Orion's club and shield lines are hidden,
- * because they would run off across the illustration's raised arm and pelt. Turning the
- * artwork off restores the full catalog figure.
- */
-export const ORION_BODY_HIP = new Set([27989, 25336, 26727, 26311, 25930, 25281, 24436, 27366]);
+const toPoints = (flat: Float32Array, count: number, dx = 0, dy = 0): SkPoint[] => {
+  const out: SkPoint[] = new Array(count);
+  for (let i = 0; i < count; i++) out[i] = vec(flat[i * 2] + dx, flat[i * 2 + 1] + dy);
+  return out;
+};
 
-/** The artwork fades out where it would either swamp or lose the real sky. */
-export function artworkFade(fov: number): number {
-  const zoomedOut = Math.min(1, Math.max(0, (92 - fov) / 22));
-  const zoomedIn = Math.min(1, Math.max(0, (fov - 7) / 5));
-  return zoomedOut * zoomedIn;
+function drawMesh(canvas: SkCanvas, mesh: ArtMesh, points: SkPoint[], paint: SkPaint, indices: number[]) {
+  const vertices = Skia.MakeVertices(VertexMode.Triangles, points, mesh.uv, undefined, indices, true);
+  canvas.drawVertices(vertices, BlendMode.DstOver, paint);
 }
 
-export function drawArtwork(canvas: SkCanvas, art: OrionArtwork, camera: Camera, cam: Mat3, field: StarField, strength: number) {
-  const t = stars();
-  const scale = cameraScale(camera);
-  const screen = (hip: number): [number, number] | null => {
-    const i = t.indexByHip.get(hip)! * 3;
-    const x = field.xyz[i], y = field.xyz[i + 1], z = field.xyz[i + 2];
-    const cz = cam[6] * x + cam[7] * y + cam[8] * z;
-    const k = camera.projection === 'stereographic' ? 1 - cz : -cz;
-    if (k <= 0.05) return null;
-    const s = scale / k;
-    return [camera.width / 2 + (cam[0] * x + cam[1] * y + cam[2] * z) * s, camera.height / 2 - (cam[3] * x + cam[4] * y + cam[5] * z) * s];
-  };
-  const a = screen(HIP.betelgeuse), b = screen(HIP.bellatrix), c = screen(HIP.rigel);
-  if (!a || !b || !c) return;
-  const [ax, ay] = art.anchors.betelgeuse, [bx, by] = art.anchors.bellatrix, [cx, cy] = art.anchors.rigel;
-  // Solve the affine map from artwork pixels to screen points through three pairs.
-  const det = (bx - ax) * (cy - ay) - (cx - ax) * (by - ay);
-  if (Math.abs(det) < 1e-6) return;
-  const m00 = ((b[0] - a[0]) * (cy - ay) - (c[0] - a[0]) * (by - ay)) / det;
-  const m01 = ((c[0] - a[0]) * (bx - ax) - (b[0] - a[0]) * (cx - ax)) / det;
-  const m10 = ((b[1] - a[1]) * (cy - ay) - (c[1] - a[1]) * (by - ay)) / det;
-  const m11 = ((c[1] - a[1]) * (bx - ax) - (b[1] - a[1]) * (cx - ax)) / det;
-  const tx = a[0] - m00 * ax - m01 * ay;
-  const ty = a[1] - m10 * ax - m11 * ay;
-  const paint = Skia.Paint();
-  paint.setAlphaf(art.opacity * strength);
-  paint.setBlendMode(BlendMode.Plus);
-  canvas.save();
-  canvas.concat(Skia.Matrix([m00, m01, tx, m10, m11, ty, 0, 0, 1]));
-  canvas.drawImageOptions(art.image, 0, 0, FilterMode.Linear, MipmapMode.Linear, paint);
-  canvas.restore();
+/** The outline, drawn on as a pen would, a fraction of each loop at a time. */
+function drawTrace(canvas: SkCanvas, mesh: ArtMesh, camera: Camera, cam: Mat3, progress: number, alpha: number) {
+  if (!mesh.loops.length || progress <= 0 || alpha <= 0) return;
+  const count = mesh.outline.length / 3;
+  if (buffer.length < count * 2) buffer = new Float32Array(count * 2);
+  if (!projectAll(mesh.outline, camera, cam, buffer)) return;
+  const path = Skia.PathBuilder.Make();
+  for (const loop of mesh.loops) {
+    const reach = Math.max(2, Math.floor(loop.count * progress));
+    for (let i = 0; i < reach; i++) {
+      const k = loop.start + (i % loop.count);
+      if (i === 0) path.moveTo(buffer[k * 2], buffer[k * 2 + 1]); else path.lineTo(buffer[k * 2], buffer[k * 2 + 1]);
+    }
+    if (progress >= 1) path.close();
+  }
+  if (!tracePaint) {
+    tracePaint = Skia.Paint();
+    tracePaint.setStyle(PaintStyle.Stroke);
+    tracePaint.setAntiAlias(true);
+    tracePaint.setStrokeWidth(0.9);
+    tracePaint.setBlendMode(BlendMode.Plus);
+  }
+  tracePaint.setColor(Float32Array.of(0.62, 0.74, 1, alpha));
+  canvas.drawPath(path.build(), tracePaint);
+}
+
+/** Draws every figure this frame shows. Returns true while something is still settling. */
+export function drawArtworks(canvas: SkCanvas, a: ArtFrame): boolean {
+  const { camera, cam, matrix, field, state, chosen, reveal } = a;
+  const forward: Vec3 = mul(transpose(matrix), unproject(camera, camera.width / 2, camera.height / 2));
+  const choices = chooseArtworks({ forward, half: viewHalfAngle(camera), camera, chosen });
+  const targets = new Map<string, number>();
+  const zooms = new Map<string, number>();
+  for (const c of choices) {
+    // Nothing fades in until its plate is here, so a late plate still arrives gently.
+    if (!artTexture(c.art.id)) continue;
+    targets.set(c.art.id, c.emphasis);
+    zooms.set(c.art.id, c.zoom);
+  }
+  const dt = a.now - state.last;
+  state.last = a.now;
+  let busy = state.presence.step(targets, dt, !a.motion);
+  state.shown = [];
+  if (!platePaint) { platePaint = Skia.Paint(); platePaint.setBlendMode(BlendMode.Plus); platePaint.setAntiAlias(true); }
+  if (!glowPaint) { glowPaint = Skia.Paint(); glowPaint.setBlendMode(BlendMode.Plus); glowPaint.setAntiAlias(true); }
+  for (const id of state.presence.ids()) {
+    const art = artRecord(id), texture = artTexture(id);
+    if (!art || !texture) continue;
+    const level = state.presence.level(id);
+    const isChosen = id === chosen;
+    const plate = isChosen ? reveal.plate : 1;
+    const zoom = zooms.get(id) ?? 1;
+    const alpha = a.opacity * level * zoom * plate;
+    const mesh = meshFor(art, field);
+    const count = mesh.xyz.length / 3;
+    if (buffer.length < count * 2) buffer = new Float32Array(count * 2);
+    if (!projectAll(mesh.xyz, camera, cam, buffer)) continue;
+    const middle = Math.floor((mesh.rows + 1) / 2) * (mesh.cols + 1) + Math.floor((mesh.cols + 1) / 2);
+    const [dx, dy] = a.motion ? parallaxOffset(buffer[middle * 2], buffer[middle * 2 + 1], camera.width, camera.height) : [0, 0];
+    let glowUv = glowUvs.get(id);
+    if (!glowUv) {
+      const scaleU = texture.glow.width() / art.width, scaleV = texture.glow.height() / art.height;
+      glowUv = mesh.uv.map((p) => vec(p.x * scaleU, p.y * scaleV));
+      glowUvs.set(id, glowUv);
+    }
+    glowPaint.setShader(texture.glowShader);
+    glowPaint.setAlphaf(Math.min(1, a.opacity * level * zoom * (isChosen ? Math.max(reveal.trace, reveal.plate) : 1)));
+    canvas.drawVertices(Skia.MakeVertices(VertexMode.Triangles, toPoints(buffer, count, dx, dy), glowUv, undefined, mesh.indices, true), BlendMode.DstOver, glowPaint);
+    if (alpha > 0.004) {
+      platePaint.setShader(texture.plateShader);
+      platePaint.setAlphaf(Math.min(1, alpha));
+      drawMesh(canvas, mesh, toPoints(buffer, count), platePaint, mesh.indices);
+    }
+    state.shown.push(id);
+    if (isChosen && !reveal.done) {
+      drawTrace(canvas, mesh, camera, cam, reveal.trace, 0.7 * a.opacity * (1 - reveal.plate * 0.8));
+      busy = true;
+    }
+  }
+  return busy;
 }

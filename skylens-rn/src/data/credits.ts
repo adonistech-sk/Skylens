@@ -25,7 +25,7 @@ export const CREDITS: Credit[] = [
   { used: 'Solar System 3D: Io, Ganymede and Callisto maps', credit: 'USGS Astrogeology Science Center, NASA Galileo and Voyager', license: 'Public domain', edits: 'Resized' },
   { used: 'Solar System 3D: Europa map', credit: 'Becker et al. 2010, USGS Astrogeology Science Center, NASA Galileo and Voyager', license: 'No use constraints stated, authors cited', edits: 'Resized' },
   { used: 'Mountains on the Location screen', credit: 'Illustration made for SkyLens with AI image generation. Not a real place.', license: 'Project artwork' },
-  { used: 'Orion artwork', credit: 'Illustration made for SkyLens with AI image generation. It is decoration pinned to the real stars and is not a source of any position.', license: 'Project artwork' },
+  { used: 'Constellation artwork', credit: 'Original figures made for SkyLens: each one was written as vector shapes by the AI assistant Claude against the real star positions, then printed by the project’s own engraving renderer. No image generator, stock art or third-party artwork was used. Decoration pinned to the real stars, never a source of any position.', license: 'Project artwork' },
   { used: 'Landscape in the sky view', credit: 'Original procedural artwork. It frames the screen and is not your real horizon, which is drawn from true altitude.', license: 'Project artwork' },
 ];
 

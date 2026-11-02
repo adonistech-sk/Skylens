@@ -131,3 +131,16 @@ Web and logic evidence unless stated. **No iOS run.** Results and iOS risks are 
 | Phase, terminator, Earth view | Tested against JPL Horizons, Tested web |
 | Asset provenance | Checksums tested against the shipped files |
 | Moons beyond the Galilean four | Not built. No verified model |
+
+## SkyLens V1 Stage 4
+
+Constellation experience. Web and logic evidence only, not run on iOS. Report: `docs/skylens-v1/V1_STAGE4_REPORT.md`. Per-constellation state: `docs/skylens-v1/V1_CONSTELLATION_MATRIX.md`.
+
+| Area | State |
+|---|---|
+| Artwork | 86 of 88 figures, 64 final and 22 acceptable. Corona Borealis and Puppis not drawn |
+| Anchoring | Measured, within 0.7 pt on screen, follows proper motion |
+| Reveal, fades, parallax of the haze | Web. Smoothness unverified, software GL |
+| Stories and tours | All 88. About 47 story claims source-checked |
+| Layers | Independent lines, names, artwork, animation, opacity |
+

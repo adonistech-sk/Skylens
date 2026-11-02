@@ -3,6 +3,7 @@
 // through sorted tables, so 118,217 HIP numbers cost a binary search rather than a scan.
 import { ALL_BODIES, bodyName } from '../astronomy/core';
 import { constellations, deepSky, genitiveOf, starMetaEntries, stars } from './catalog';
+import { STORIES } from './constellationStories';
 
 export type Category = 'Solar System' | 'Stars' | 'Constellations' | 'Deep Sky' | 'Moon';
 
@@ -67,7 +68,7 @@ export function editDistance(a: string, b: string, limit: number): number | null
 function buildEntries(): Entry[] {
   const entries: Entry[] = [];
   for (const b of ALL_BODIES) entries.push({ id: `body:${b}`, name: bodyName(b), aliases: BODY_ALIASES[b] ?? [], category: 'Solar System', popularity: 100 });
-  for (const c of constellations) entries.push({ id: `con:${c.id}`, name: c.name, aliases: [c.id, c.genitive], category: 'Constellations', popularity: 60 });
+  for (const c of constellations) entries.push({ id: `con:${c.id}`, name: c.name, aliases: [c.id, c.genitive, ...(STORIES[c.id]?.aliases ?? [])], category: 'Constellations', popularity: 60 });
   const t = stars();
   for (const [hip, m] of starMetaEntries()) {
     const i = t.indexByHip.get(hip);

@@ -2,6 +2,8 @@ import { Mat3 } from '../../astronomy/core';
 import { stars } from '../../data/catalog';
 import { MODE_DEFAULTS, starLimit } from '../../state/skyModes';
 import { getState, Layers } from '../../state/store';
+import { Presence } from './artGeometry';
+import { newArtState } from './artwork';
 import { emptyResult, frameBrightness, renderFrame } from './renderer';
 import { buildStarField, computeMoment, yearsSinceJ2000 } from './scene';
 import { sharedResources } from './SkyView';
@@ -20,6 +22,7 @@ export async function renderCaptureOverlay(orientation: Mat3, fov: number, size:
     moment, field: buildStarField(stars(), yearsSinceJ2000(time)),
     layers: { ...layers, ground: false }, selection: null, selectionDir: null, moving: false, overlayOnly: true,
     bottomInset: 0, topInset: 0, showCompass: false, nightVision: false, selectionAge: 1, nightPreview: false, framing: false,
+    art: newArtState(), names: new Presence(3.2), now: time / 1000, motion: false,
   }, resources);
 }
 

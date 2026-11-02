@@ -4,6 +4,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Defs, Line, RadialGradient, Stop } from 'react-native-svg';
 import { constellation, SkyObject, starColor, stars } from '../data/catalog';
+import { ART_ASSETS } from '../data/generated/constellationArtAssets';
 import { TabBar } from './components';
 import { images, thumbFor } from './images';
 import { Reveal } from './motion';
@@ -38,6 +39,9 @@ export function ObjectThumb({ object, size = 54 }: { object: SkyObject; size?: n
   const source = thumbFor(object);
   const box = { width: size, height: size, borderRadius: 12 };
   if (source) return <View style={[box, styles.thumb]}><Image source={source} style={box} contentFit="cover" /></View>;
+
+  const plate = object.type === 'constellation' ? ART_ASSETS[object.id.slice(4)]?.plate : undefined;
+  if (plate) return <View style={[box, styles.thumb]}><Image source={plate} style={box} contentFit="contain" /></View>;
 
   if (object.type === 'constellation') {
     const c = constellation(object.id.slice(4));

@@ -8,7 +8,10 @@ import { Camera, cameraScale, pointsPerDegree, project, unproject } from '../../
 import { angleBetween, DEG, Mat3, mul, normalize360, transpose, vectorHorizontal, Vec3 } from '../../astronomy/core';
 import { ObjectType, starColor, stars } from '../../data/catalog';
 import { labelBudget, labelLimit, Layers, SkyMode, SkySettings } from '../../state/skyModes';
-import { artworkFade, drawArtwork, ORION_BODY_HIP, OrionArtwork } from './artwork';
+import { ArtState, drawArtworks } from './artwork';
+import { artRecord } from '../../data/constellationArt';
+import { figureOfRow, figurePlan, revealAt, RevealState } from './figures';
+import { Presence } from './artGeometry';
 import { azAlt, boundaryPolygons, gridLabel, gridLines, gridStep, GridKind, gridToJ2000, lonLat } from './grids';
 import { LabelBox, LabelCandidate, LabelStyle, placeLabels, PlacedLabel, PRIORITY } from './labels';
 import { BodyState, chartStarList, constellationGeometry, eachStar, mulMatFast, namedStarList, SkyMoment, skyBrightness, SkyQuery, StarField, starRadius, viewHalfAngle, visibleDeepSky } from './scene';
@@ -23,7 +26,6 @@ export interface SkyResources {
   smallFont: SkFont;
   trackedFont: SkFont;
   headingFont: SkFont;
-  artwork: OrionArtwork | null;
 }
 
 /** What the mode asks of this frame. */
@@ -39,9 +41,17 @@ export interface FrameChart {
 }
 
 /** Filled in while a frame is drawn. */
-export interface FrameResult { scanned: number; drawn: number; labels: PlacedLabel[] }
+export interface FrameResult {
+  scanned: number;
+  drawn: number;
+  labels: PlacedLabel[];
+  /** Figures drawn, for taps to agree with what is on screen. */
+  artwork: string[];
+  /** Something is still easing, so another frame is wanted. */
+  animating: boolean;
+}
 
-export const emptyResult = (): FrameResult => ({ scanned: 0, drawn: 0, labels: [] });
+export const emptyResult = (): FrameResult => ({ scanned: 0, drawn: 0, labels: [], artwork: [], animating: false });
 
 export interface SkyFrame {
   camera: Camera;
@@ -70,6 +80,13 @@ export interface SkyFrame {
   nightPreview: boolean;
   /** The framing landscape, a screen-anchored composition layer. Never the true horizon. */
   framing: boolean;
+  /** Eased figures and names, owned by each sky view. */
+  art: ArtState;
+  names: Presence;
+  /** Seconds, on the frame clock. */
+  now: number;
+  /** Reveals and fades are allowed. False with Reduce Motion or the layer switched off. */
+  motion: boolean;
 }
 
 // Skia only exists once its runtime has loaded, so nothing is created at import time.
@@ -84,6 +101,12 @@ function makePaints() {
   lineFocus.setStrokeWidth(1.05);
   lineFocus.setAntiAlias(true);
   lineFocus.setColor(Skia.Color('rgba(232,238,255,0.88)'));
+  const lineWarm = Skia.Paint();
+  lineWarm.setStyle(PaintStyle.Stroke);
+  lineWarm.setStrokeWidth(1.35);
+  lineWarm.setStrokeCap(StrokeCap.Round);
+  lineWarm.setAntiAlias(true);
+  lineWarm.setColor(Float32Array.of(0.98, 0.72, 0.5, 0.95));
   const fill = Skia.Paint();
   fill.setAntiAlias(true);
   const text = Skia.Paint();
@@ -100,7 +123,7 @@ function makePaints() {
   dashed.setStrokeWidth(0.7);
   dashed.setAntiAlias(true);
   dashed.setPathEffect(Skia.PathEffect.MakeDash([3, 3], 0));
-  return { line, lineFocus, fill, text, stroke, grid, dashed, points: new Map<string, SkPaint>() };
+  return { line, lineFocus, lineWarm, fill, text, stroke, grid, dashed, points: new Map<string, SkPaint>() };
 }
 let paints: ReturnType<typeof makePaints>;
 
@@ -324,13 +347,61 @@ function drawBoundaries(canvas: SkCanvas, f: SkyFrame, only: string | null = nul
   canvas.drawPath(path.build(), paints.dashed);
 }
 
-let orionBody: Set<number> | null = null;
+const coreRows = new Map<string, number[]>();
 
-type ConstellationName = { id: string; name: string; x: number; y: number; focus: number; span: number };
+/** The mean of a figure's anchor stars on screen, where artwork exists. */
+function artCore(id: string, toScreen: (row: number) => [number, number] | null): [number, number] | null {
+  let rows = coreRows.get(id);
+  if (!rows) {
+    const table = stars();
+    rows = (artRecord(id)?.anchors ?? []).map((a) => table.indexByHip.get(a.hip)).filter((r): r is number => r !== undefined);
+    coreRows.set(id, rows);
+  }
+  if (!rows.length) return null;
+  let x = 0, y = 0, n = 0;
+  for (const row of rows) { const p = toScreen(row); if (p) { x += p[0]; y += p[1]; n++; } }
+  return n ? [x / n, y / n] : null;
+}
 
-function drawConstellations(canvas: SkCanvas, f: SkyFrame, cam: Mat3, artOn: boolean): ConstellationName[] {
+type ConstellationName = { id: string; name: string; x: number; y: number; focus: number; span: number; alpha: number };
+
+/** The constellation a frame is about: the one selected, or the one a selected star belongs to. */
+function chosenFigure(selection: string | null): { id: string; star: number | null } | null {
+  if (!selection) return null;
+  if (selection.startsWith('con:')) return { id: selection.slice(4), star: null };
+  if (!selection.startsWith('star:')) return null;
+  const row = stars().indexByHip.get(Number(selection.slice(5)));
+  const id = row === undefined ? null : figureOfRow(row);
+  return id ? { id, star: row! } : null;
+}
+
+/** The chosen figure's lines growing from its brightest star, and each star as they reach it. */
+function drawReveal(canvas: SkCanvas, f: SkyFrame, r: SkyResources, id: string, reveal: RevealState, toScreen: (i: number) => [number, number] | null) {
+  const plan = figurePlan(id);
+  if (!plan) return;
+  const path = Skia.PathBuilder.Make();
+  for (const s of plan.segments) {
+    const t = Math.min(1, Math.max(0, (reveal.lines - s.from) / (s.to - s.from)));
+    if (t <= 0) continue;
+    const p = toScreen(s.a), q = toScreen(s.b);
+    if (!p || !q || Math.hypot(p[0] - q[0], p[1] - q[1]) > 700) continue;
+    path.moveTo(p[0], p[1]);
+    path.lineTo(p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t);
+  }
+  canvas.drawPath(path.build(), paints.lineFocus);
+  for (const s of plan.stars) {
+    const since = reveal.lines - s.at;
+    if (since < 0) continue;
+    const p = toScreen(s.row);
+    if (!p) continue;
+    // A brief warm flare as the line arrives, settling into a quiet mark on each figure star.
+    const flare = reveal.done ? 0 : Math.exp(-since * 9) * 0.5;
+    drawSprite(canvas, r.sprite, p[0], p[1], 15 + flare * 18, 0.98, 0.72, 0.5, 0.2 + flare);
+  }
+}
+
+function drawConstellations(canvas: SkCanvas, f: SkyFrame, r: SkyResources, cam: Mat3, reveal: RevealState): ConstellationName[] {
   const { camera, field } = f;
-  const table = stars();
   const scale = cameraScale(camera);
   const stereo = camera.projection === 'stereographic';
   const w = camera.width, h = camera.height;
@@ -344,36 +415,51 @@ function drawConstellations(canvas: SkCanvas, f: SkyFrame, cam: Mat3, artOn: boo
     const s = scale / k;
     return [w / 2 + v[0] * s, h / 2 - v[1] * s];
   };
-  orionBody ??= new Set([...ORION_BODY_HIP].map((hip) => table.indexByHip.get(hip)!));
   const names: ConstellationName[] = [];
   const pathNormal = Skia.PathBuilder.Make();
   const pathFocus = Skia.PathBuilder.Make();
-  const chosen = f.selection?.startsWith('con:') ? f.selection.slice(4) : null;
+  const pathWarm = Skia.PathBuilder.Make();
+  const figure = chosenFigure(f.selection);
+  const chosen = figure?.id ?? null;
+  const zone = Math.min(w, h) * (f.overlayOnly ? 0.4 : 0.3);
   for (const c of constellationGeometry()) {
-    if (!f.layers.constellations && c.id !== chosen) continue;
+    const isChosen = c.id === chosen;
+    if (!f.layers.constellations && !f.layers.constellationNames && !isChosen) continue;
     let sumX = 0, sumY = 0, n = 0;
     const segs: [number, number, number, number][] = [];
     for (const [a, b] of c.segments) {
-      if (artOn && c.id === 'Ori' && !(orionBody.has(a) && orionBody.has(b))) continue;
       const p = toScreen(a), q = toScreen(b);
       if (!p || !q) continue;
       const out = (p[0] < -40 && q[0] < -40) || (p[0] > w + 40 && q[0] > w + 40) || (p[1] < -40 && q[1] < -40) || (p[1] > h + 40 && q[1] > h + 40);
       if (out || Math.hypot(p[0] - q[0], p[1] - q[1]) > 700) continue;
       segs.push([p[0], p[1], q[0], q[1]]);
       sumX += p[0] + q[0]; sumY += p[1] + q[1]; n += 2;
+      // The lines that meet at a selected star take its colour.
+      if (figure?.star !== null && figure?.star !== undefined && isChosen && (a === figure.star || b === figure.star)) { pathWarm.moveTo(p[0], p[1]); pathWarm.lineTo(q[0], q[1]); }
     }
     if (!segs.length) continue;
-    const cx = sumX / n, cy = sumY / n;
+    // A drawn figure's middle is its body, not the far end of whatever it holds.
+    const core = artCore(c.id, toScreen);
+    const cx = core?.[0] ?? sumX / n, cy = core?.[1] ?? sumY / n;
     const inside = cx > 0 && cx < w && cy > 0 && cy < h;
     const dist = Math.hypot(cx - center.x, cy - center.y);
-    const focus = c.id === chosen || (inside && dist < Math.min(w, h) * (f.overlayOnly ? 0.4 : 0.3));
-    const path = focus ? pathFocus : pathNormal;
-    for (const s of segs) { path.moveTo(s[0], s[1]); path.lineTo(s[2], s[3]); }
+    const focus = isChosen || (inside && dist < zone);
+    if (f.layers.constellations || isChosen) {
+      // A chosen constellation unfolds by itself, so the common path leaves it out.
+      if (!(isChosen && figure?.star === null)) {
+        const path = focus ? pathFocus : pathNormal;
+        for (const s of segs) { path.moveTo(s[0], s[1]); path.lineTo(s[2], s[3]); }
+      }
+    }
     const span = Math.max(...segs.map((s) => Math.max(s[0], s[2]))) - Math.min(...segs.map((s) => Math.min(s[0], s[2])));
-    if (inside) names.push({ id: c.id, name: c.name, x: cx, y: cy, focus: focus ? 1 : 0, span });
+    // A name fades toward the edge of the focus zone, so it never drops out abruptly.
+    const alpha = isChosen ? 1 : Math.min(1, Math.max(0, (zone - dist) / (zone * 0.22)));
+    if (inside) names.push({ id: c.id, name: c.name, x: cx, y: cy, focus: focus ? 1 : 0, span, alpha });
   }
   canvas.drawPath(pathNormal.build(), paints.line);
   canvas.drawPath(pathFocus.build(), paints.lineFocus);
+  if (figure && figure.star === null) drawReveal(canvas, f, r, figure.id, reveal, toScreen);
+  canvas.drawPath(pathWarm.build(), paints.lineWarm);
   return names.sort((a, b) => b.focus - a.focus);
 }
 
@@ -452,10 +538,12 @@ function collectLabels(f: SkyFrame, r: SkyResources, names: ConstellationName[],
     const w = r.labelFont.getTextWidth(b.name);
     out.push({ text: b.name, style: 'body', priority: PRIORITY.body, id: `body:${b.id}`, boxes: [{ x: p.x + 10, y: p.y - 7, w, h: 16 }] });
   }
-  if (f.layers.constellations) {
+  const chosenName = f.selection?.startsWith('con:') ? f.selection.slice(4) : null;
+  if (f.layers.constellationNames || chosenName) {
     const fade = 1 - brightness;
     if (fade > 0.02) {
-      for (const n of chart ? names : names.filter((x) => x.focus > 0).slice(0, 2)) {
+      const offered = f.layers.constellationNames ? names : names.filter((x) => x.id === chosenName);
+      for (const n of chart ? offered : offered.filter((x) => x.focus > 0).slice(0, 2)) {
         const id = `con:${n.id}`;
         if (chart) {
           const text = n.name.toUpperCase();
@@ -468,7 +556,7 @@ function collectLabels(f: SkyFrame, r: SkyResources, names: ConstellationName[],
         // Tucked against the left of the figure, so the name doesn't cross its lines.
         const left = Math.max(14, n.x - w - n.span * 0.2);
         const top = n.y + n.span * 0.22;
-        if (aboveGround(n.x, top)) out.push({ text, style: 'constellation', priority: PRIORITY.constellation, id, boxes: [{ x: left, y: top, w, h: 14 }] });
+        if (aboveGround(n.x, top)) out.push({ text, style: 'constellation', priority: PRIORITY.constellation, id, alpha: n.alpha, boxes: [{ x: left, y: top, w, h: 14 }] });
       }
     }
   }
@@ -502,10 +590,14 @@ function collectLabels(f: SkyFrame, r: SkyResources, names: ConstellationName[],
   }
 }
 
-function drawPlacedLabels(canvas: SkCanvas, placed: PlacedLabel[], r: SkyResources, brightness: number) {
+function drawPlacedLabels(canvas: SkCanvas, f: SkyFrame, placed: PlacedLabel[], r: SkyResources, brightness: number, dt: number) {
+  // Constellation names ease in. Everything else stays as immediate as it always was.
+  const wanted = new Map<string, number>();
+  for (const { candidate: c } of placed) if (c.style === 'constellation' && c.id) wanted.set(c.id, c.alpha ?? 1);
+  if (f.names.step(wanted, dt, !f.motion)) f.result.animating = true;
   for (const { candidate: c, box } of placed) {
     const [cr, cg, cb, ca] = STYLE_TINT[c.style];
-    if (c.style === 'constellation') { drawText(canvas, c.text, box.x, box.y + 11, r.trackedFont, cr, cg, cb, ca * (1 - brightness)); continue; }
+    if (c.style === 'constellation') { drawText(canvas, c.text, box.x, box.y + 11, r.trackedFont, cr, cg, cb, ca * (1 - brightness) * f.names.level(c.id ?? '')); continue; }
     if (c.style === 'chartConstellation' || c.style === 'grid' || c.style === 'deep') { drawText(canvas, c.text, box.x, box.y + 10.5, r.smallFont, cr, cg, cb, ca); continue; }
     const fade = c.style === 'star' || c.style === 'chartStar' ? 1 - brightness * 0.8 : 1;
     drawText(canvas, c.text, box.x, box.y + (c.style === 'body' ? 12 : 12.5), r.labelFont, cr, cg, cb, ca * fade);
@@ -714,8 +806,20 @@ export function renderFrame(f: SkyFrame, r: SkyResources): SkPicture {
     canvas.save();
     canvas.clipRect(Skia.XYWHRect(0, 0, camera.width, camera.height), ClipOp.Intersect, false);
     drawSkyPass(canvas, f, r, brightness, 'sky');
-    const artStrength = f.layers.artwork && r.artwork && f.layers.constellations && !f.overlayOnly && brightness < 0.5 ? artworkFade(camera.fov) : 0;
-    if (artStrength > 0) drawArtwork(canvas, r.artwork!, camera, cam, f.field, artStrength);
+    const dt = f.now - f.art.last;
+    const figure = chosenFigure(f.selection);
+    // The figure unfolds when a constellation is chosen, and only then. A selected star just
+    // lights its corner of the figure, which is already there.
+    const unfolding = figure && figure.star === null && f.motion ? revealAt(f.selectionAge) : revealAt(Infinity);
+    if (f.layers.artwork && !f.overlayOnly && brightness < 0.5) {
+      const night = 1 - Math.max(0, brightness - 0.25) / 0.25;
+      const busy = drawArtworks(canvas, { camera, cam, matrix: moment.matrix, field: f.field, opacity: f.chart.settings.artworkOpacity * night, chosen: figure?.id ?? null, reveal: unfolding, motion: f.motion, now: f.now, state: f.art });
+      if (busy) f.result.animating = true;
+      f.result.artwork = f.art.shown;
+    } else {
+      f.art.last = f.now;
+    }
+    if (!unfolding.done) f.result.animating = true;
     let names: ConstellationName[] = [];
     // The figures stay available by day, but recede: the stars they join are not visible.
     paints.lineFocus.setAlphaf(0.88 * (1 - 0.72 * brightness));
@@ -730,7 +834,7 @@ export function renderFrame(f: SkyFrame, r: SkyResources): SkPicture {
     }
     const chosen = f.selection?.startsWith('con:') ? f.selection.slice(4) : null;
     if (chosen && !f.overlayOnly) drawBoundaries(canvas, f, chosen);
-    if (f.layers.constellations || chosen) names = drawConstellations(canvas, f, cam, artStrength > 0);
+    if (f.layers.constellations || f.layers.constellationNames || figure) names = drawConstellations(canvas, f, r, cam, unfolding);
     if (f.layers.stars) drawStars(canvas, f, r, brightness, cam);
     if (f.layers.deepSky) drawDeepSky(canvas, f, r, brightness, candidates);
     if (f.layers.planets) {
@@ -746,7 +850,7 @@ export function renderFrame(f: SkyFrame, r: SkyResources): SkPicture {
     collectLabels(f, r, names, brightness, candidates, cam);
     const bounds = { w: camera.width, top: f.topInset, bottom: camera.height - f.bottomInset - (f.chart.readout ? 30 : 0) };
     f.result.labels = placeLabels(candidates, bounds, labelBudget(f.chart.settings.labelDensity));
-    drawPlacedLabels(canvas, f.result.labels, r, brightness);
+    drawPlacedLabels(canvas, f, f.result.labels, r, brightness, dt);
     drawSelection(canvas, f, r);
     if (f.showCompass) drawCompass(canvas, f, r);
     if (f.chart.readout) drawReadout(canvas, f, r);

@@ -16,7 +16,7 @@ What the React Native app really uses, audited from the repository on 2026-11-01
 | Milky Way map | NASA SVS Deep Star Maps 2020, built with Gaia DR2 | Static | NASA media, credit shown (`src/data/credits.ts`) | Bundled image | Pass as a NASA product. Not a Gaia catalog import |
 | Meteor showers | Parameters typed from the IMO Working List | By hand | Facts. The audit marks IMO copying **HOLD** | Code, `events.ts` | **Decision needed**, see decision log |
 | Object imagery | Rows in `skylens-rn/ASSET_CREDITS.md` | Per asset | Per asset | Bundled | Open items 1 to 4 there |
-| Orion art, Location art | Generated through Magnific | Static | Provider terms not confirmed | Bundled | **Owner decision**, `ASSET_CREDITS.md` item 4 |
+| Location art (Orion's raster is no longer bundled) | Generated through Magnific | Static | Provider terms not confirmed | Bundled | **Owner decision**, `ASSET_CREDITS.md` item 4 |
 
 There are no network calls in the sky, catalog or Tonight code. No analytics SDK is installed.
 
@@ -71,3 +71,12 @@ These stay out of the app. A recommendation in `DATA_SOURCE_AUDIT.md` is not an 
 ## Row-level register
 
 `DATA_SOURCE_AUDIT.md` section D lists fields that no record yet fills in full, including `reviewer`, `reviewed_at` and `commercial_allowed_proof`. Those need a person. Filling them in here would invent evidence.
+
+## Added by Stage 4
+
+No outside data or image was imported. Star lines, positions and boundaries are the existing sources above.
+
+| Data | Provider and version | Licence evidence | Storage | Release gate |
+|---|---|---|---|---|
+| 86 constellation plates, 7.1 MB, and outlines | Original. Vector sources in `scripts/constellation-art/figures/`, authored by Claude, printed by `engrave.mjs` | Project artwork, see the decision log | Bundled, loaded on demand | **Owner note** on AI authorship |
+| Constellation Stories, 88 entries, and tour notes | Written for this project from standard references. About 47 claims were checked against sources, the rest reviewed from knowledge | Facts and original wording. Classical sources are cited, not quoted | Code | Pass, with the limit stated in `V1_STAGE4_REPORT.md` |

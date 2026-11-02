@@ -14,6 +14,8 @@ export interface LabelCandidate {
   boxes: LabelBox[];
   /** The object a tap on this label selects. */
   id?: string;
+  /** Multiplies the style's strength, for labels easing in and out. */
+  alpha?: number;
 }
 
 export interface PlacedLabel { candidate: LabelCandidate; box: LabelBox }

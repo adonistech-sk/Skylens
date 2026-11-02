@@ -92,3 +92,16 @@ Bugs this work found:
 - **A tap on Jupiter selected Mars.** The nearest body in a finger's reach beat the disc under the finger.
 - **SkSL rejected the first shaders,** over the reserved names `sample` and `out`, and a shader passed to a function. CanvasKit's error callback names the line.
 - **Uranus looked cream,** with a dark unobserved hemisphere that would have read as surface.
+
+## V1 Stage 4
+
+| Check | Command | Note |
+|---|---|---|
+| Anchoring, animation purity, culling, layers, stories, tours | `npx vitest run tests/constellations-v1.test.ts` | Prints measured anchoring. Runs against all shipped figures |
+| Stage 4 browser flows and captures | `node scripts/web-stage4.mjs <out>` | Web only. `ONLY=<text>` runs one flow. Measures anchoring live with `__skyProbe.anchors()` |
+| A figure in the real sky | `node scripts/web-art.mjs <out> Ori Leo` | Web only. Moves the clock to a night when it is high |
+| Print a figure for review | `node scripts/constellation-art/build.mjs <out> Lyr` | `Lyr-stars.jpg` overlays the real stars |
+| Bake everything into the app | `node scripts/constellation-art/build.mjs <out> --final` | Writes plates, glows, outlines and generated data |
+| Completion matrix | `node scripts/constellation-art/matrix.mjs ../docs/skylens-v1/evidence/stage4/art-review.json ../docs/skylens-v1/V1_CONSTELLATION_MATRIX.md` | Generated from shipped data. Update `art-review.json` after any review |
+| iOS | `maestro/10_constellations.yaml` | Written, has not run |
+

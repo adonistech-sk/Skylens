@@ -5,7 +5,11 @@ export type SkyMode = 'observe' | 'explore' | 'atlas';
 
 export interface Layers {
   stars: boolean;
+  /** The figures' lines. Names and artwork have switches of their own. */
   constellations: boolean;
+  constellationNames: boolean;
+  /** Reveals, fades and parallax. Reduce Motion turns these off whatever this says. */
+  constellationMotion: boolean;
   boundaries: boolean;
   labels: boolean;
   deepSky: boolean;
@@ -33,6 +37,8 @@ export interface SkySettings {
   magnitudeCap: number;
   /** 0 to 1, with 0.5 neutral. */
   labelDensity: number;
+  /** How strongly constellation artwork is drawn, 0 to 1. */
+  artworkOpacity: number;
 }
 
 export type ModeSettings = Record<SkyMode, SkySettings>;
@@ -43,19 +49,19 @@ export const BUNDLED_LIMIT = 8;
 
 /** Today's TestFlight sky, unchanged. */
 export const DEFAULT_LAYERS: Layers = {
-  stars: true, constellations: true, boundaries: false, labels: true, deepSky: true, galaxies: true, clusters: true, nebulae: true, planets: true, milkyWay: true,
+  stars: true, constellations: true, constellationNames: true, constellationMotion: true, boundaries: false, labels: true, deepSky: true, galaxies: true, clusters: true, nebulae: true, planets: true, milkyWay: true,
   artwork: true, atmosphere: true, ground: true, framing: true, gridEquatorial: false, gridHorizontal: false, gridEcliptic: false, gridGalactic: false,
 };
 
 export const MODE_DEFAULTS: ModeSettings = {
   observe: {
-    layers: { ...DEFAULT_LAYERS, constellations: false, deepSky: false, artwork: false, framing: false },
-    density: 0.5, magnitudeCap: 6.5, labelDensity: 0.4,
+    layers: { ...DEFAULT_LAYERS, constellations: false, constellationNames: false, deepSky: false, artwork: false, framing: false },
+    density: 0.5, magnitudeCap: 6.5, labelDensity: 0.4, artworkOpacity: 0.4,
   },
-  explore: { layers: DEFAULT_LAYERS, density: 0.5, magnitudeCap: NO_CAP, labelDensity: 0.5 },
+  explore: { layers: DEFAULT_LAYERS, density: 0.5, magnitudeCap: NO_CAP, labelDensity: 0.5, artworkOpacity: 0.62 },
   atlas: {
     layers: { ...DEFAULT_LAYERS, boundaries: true, artwork: false, atmosphere: false, ground: false, framing: false, gridEquatorial: true },
-    density: 0.5, magnitudeCap: NO_CAP, labelDensity: 0.7,
+    density: 0.5, magnitudeCap: NO_CAP, labelDensity: 0.7, artworkOpacity: 0.4,
   },
 };
 
@@ -106,7 +112,12 @@ export function migrateSkySettings(saved: { layers?: Partial<Layers>; modes?: Pa
     const fallback = MODE_DEFAULTS[mode];
     const stored = saved.modes?.[mode];
     const legacy = mode === 'explore' && !saved.modes ? saved.layers : undefined;
-    modes[mode] = { ...fallback, ...stored, layers: { ...fallback.layers, ...legacy, ...stored?.layers } };
+    const layers = { ...fallback.layers, ...legacy, ...stored?.layers };
+    // Before Stage 4 one switch hid a constellation's lines, name and art together, so anyone
+    // who turned it off keeps a sky without them.
+    const old = stored?.layers ?? legacy;
+    if (old && old.constellationNames === undefined && old.constellations === false) { layers.constellationNames = false; layers.artwork = false; }
+    modes[mode] = { ...fallback, ...stored, layers };
   }
   const skyMode = saved.skyMode && modes[saved.skyMode] ? saved.skyMode : 'explore';
   return { skyMode, modes };

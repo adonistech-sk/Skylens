@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { AccessibilityInfo, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { deepPack } from '../../data/catalogs/runtime';
 import { DEEP_PACK } from '../../data/generated/deepPack';
 import { color, font } from '../../design/tokens';
 import { Layers, MODE_LABELS, NO_CAP } from '../../state/skyModes';
-import { resetSkyMode, setDensity, setLabelDensity, setLayer, setMagnitudeCap, setNightVision, useStore } from '../../state/store';
+import { resetSkyMode, setArtworkOpacity, setDensity, setLabelDensity, setLayer, setMagnitudeCap, setNightVision, useStore } from '../../state/store';
 import { perfSnapshot, PerfSnapshot } from './perf';
 import { Slider } from './Slider';
 
@@ -16,6 +16,7 @@ const GROUPS: { title: string; rows: Row[] }[] = [
     { key: 'planets', label: 'Planets, Sun and Moon' },
     { key: 'milkyWay', label: 'Milky Way' },
     { key: 'atmosphere', label: 'Atmosphere' },
+    { key: 'labels', label: 'All labels' },
   ] },
   { title: 'Deep sky', rows: [
     { key: 'deepSky', label: 'Deep sky objects' },
@@ -24,10 +25,11 @@ const GROUPS: { title: string; rows: Row[] }[] = [
     { key: 'nebulae', label: 'Nebulae', needs: 'deepSky', inset: true },
   ] },
   { title: 'Constellations', rows: [
-    { key: 'constellations', label: 'Constellations' },
+    { key: 'constellations', label: 'Constellation lines' },
+    { key: 'constellationNames', label: 'Constellation names', needs: 'labels' },
+    { key: 'artwork', label: 'Constellation artwork' },
+    { key: 'constellationMotion', label: 'Constellation animation' },
     { key: 'boundaries', label: 'Boundaries' },
-    { key: 'artwork', label: 'Orion artwork', needs: 'constellations' },
-    { key: 'labels', label: 'Labels' },
   ] },
   { title: 'Grids', rows: [
     { key: 'gridEquatorial', label: 'Equatorial (J2000)' },
@@ -76,6 +78,8 @@ export function LayersPanel({ top, maxHeight }: { top: number; maxHeight: number
   const mode = useStore((s) => s.skyMode);
   const settings = useStore((s) => s.modes[s.skyMode]);
   const nightVision = useStore((s) => s.nightVision);
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => { AccessibilityInfo.isReduceMotionEnabled().then(setReduced).catch(() => {}); }, []);
   const faintest = settings.magnitudeCap >= NO_CAP ? 'Automatic' : `V ${settings.magnitudeCap.toFixed(1)}`;
   return (
     <View testID="sky-layers-panel" style={[styles.panel, { top, maxHeight }]}>
@@ -92,6 +96,12 @@ export function LayersPanel({ top, maxHeight }: { top: number; maxHeight: number
             {g.rows.map((r) => (
               <Toggle key={r.key} label={r.label} value={layers[r.key]} onChange={(v) => setLayer(r.key, v)} disabled={r.needs ? !layers[r.needs] : false} inset={r.inset} />
             ))}
+            {g.title === 'Constellations' ? (
+              <>
+                <Slider testID="layers-art-opacity" label="Artwork opacity" value={settings.artworkOpacity} min={0.1} max={1} step={0.05} format={(v) => `${Math.round(v * 100)}%`} onChange={setArtworkOpacity} />
+                {reduced ? <Text style={styles.note}>Reduce Motion is on, so constellations appear without animation.</Text> : null}
+              </>
+            ) : null}
           </View>
         ))}
         <Toggle label="Night vision" value={nightVision} onChange={setNightVision} />

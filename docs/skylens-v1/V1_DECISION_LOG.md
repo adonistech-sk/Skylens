@@ -43,6 +43,20 @@ Conflicts between the documents and the repository, each with its resolution. Ro
 | 36 | Moon lighting beyond the terminator | A 5% floor instead of black | A black disc with labels read as a failed screen. The card still says it's night and offers full light |
 | 37 | Bundled map resolution | 8K in 160 tiles, 3.2 MB | Higher needs hosting, which is an owner decision |
 
+| 38 | How to make artwork for 88 constellations | **Vector figures written by Claude against the catalog's real stars, printed by our own engraving renderer.** No image generator, stock or third-party art | "Do not import artwork whose rights remain unresolved". A generated image rests on a provider's terms and can't be anchored. Here the source is reviewable text and nothing is imported. The figures are still AI-authored, which is a rights question of its own, listed below |
+| 39 | Flat SVG strokes or a printed plate | **Printed plates, with vector sources.** Figures live as vector parts in `scripts/constellation-art/figures/`, each also exported as an SVG outline in `design/constellation-art/`, and print to a small JPEG | Flat strokes couldn't reach the approved engraved look. Vector source plus a raster print is the "equivalent" the brief allows, and the outline stays vector in the app for the reveal |
+| 40 | How a plate reaches the sky | **A mesh through the real camera,** not a fitted transform. Each vertex goes plate → sky plane → J2000 → the same projection as the stars | A fitted affine or homography can't follow stereographic distortion across a large figure. Measured against stars, see the report |
+| 41 | Time Travel and proper motion | The plate leans with its stars, each mesh vertex following the drift of nearby figure stars | A plate fixed to J2000 would leave stars behind by minutes of arc over the 400-year range. Star positions are read, never written |
+| 42 | The approved Orion raster | **Replaced in the sky by a new original Orion.** `assets/sky/orion-art.jpg` stays in the repository, unused and no longer bundled | It is AI-generated with open rights, and it wouldn't match 87 other figures. Its look is the reference the new set is built to. This is a visible change to an approved composition, so it is listed for the owner below |
+| 43 | Orion's club and shield lines hidden over the art | **All catalog lines now show.** The new figure holds the club and pelt on those stars | The old raster had to hide them because its arm and pelt didn't follow them |
+| 44 | A constellation that hasn't been drawn | **Nothing stands in for it.** Lines, stars and names only | "Do not replace missing artwork with low-quality placeholders" |
+| 45 | What `constellations` means in Layers | It now means lines only. Names, artwork and animation have their own switches, opacity a slider. Saved skies that had it off keep names and art off | "Independent toggles". Migration keeps what a user chose |
+| 46 | Parallax | **Only the soft haze behind a figure moves, at most 6 points.** The plate and stars never do | Moving a plate would break its anchoring, and the brief says "where geometrically appropriate" |
+| 47 | A tap on empty sky inside a figure | Selects the constellation. Stars, planets and labels under the finger still win | J02 says "tap Orion". The tap only works on what the frame drew |
+| 48 | Tours for constellations without a curated script | Built from what lies inside the IAU boundary, with text only from measured catalog values | "All positions must come from the existing astronomy engine", and invented commentary would be worse than plain facts |
+| 49 | Myth and science on one screen | Three separate sections, with a line saying traditions are not astronomy, and a test that the science text holds no myth | The brief, and PRD GUIDE-002 |
+| 50 | Lacaille's and other modern figures | No myth is written for them. The screen says so | Inventing one would present fiction as tradition |
+
 ## Features at risk, and how they are protected
 
 | Feature | Risk from Stage 1 | Protection |
@@ -62,5 +76,7 @@ Conflicts between the documents and the repository, each with its resolution. Ro
 | Hipparcos commercial terms | Legal judgment | Pack and base stars stay in place, release gate open |
 | NGC 2000.0 | Legal judgment, highest priority | No deep-sky expansion. Fallback is OpenNGC, with share-alike review |
 | Meteor shower values from the IMO list | Facts or protected compilation | Stays as shipped, noted in the matrix |
-| AI artwork commercial terms | Your provider plan | Orion art and Location art stay marked open |
+| AI artwork commercial terms | Your provider plan | Location art stays marked open. Orion's raster no longer ships, see decision 42 |
+| AI authorship of the constellation figures | Legal judgment | Figures stay in. No provider terms are involved, but whether AI-written work can be protected by copyright is unsettled, so a competitor might be able to reuse them. Your use of them isn't the concern |
+| The new Orion replacing the approved raster | It changes an approved composition | The new original is live. Reverting is a small code change, but it brings back the open rights question |
 | Gaia DR3 and OpenNGC rights | Decides the catalog size V1 can claim | Capacity targets stay unmet |
