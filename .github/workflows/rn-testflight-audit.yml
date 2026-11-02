@@ -1,0 +1,39 @@
+# Prints who can receive a SkyLens TestFlight build, without changing anything. It runs before
+# a build exists, so a group with automatic distribution is caught before it could get one.
+# The output is public, because this repository is: see .github/scripts/testflight-asc.mjs.
+#
+# Use a run on a push that changes this file or the script. A workflow_dispatch button only
+# appears once this file is on the default branch.
+
+name: SkyLens RN TestFlight audit
+
+on:
+  push:
+    branches: [skylens-rn]
+    paths:
+      - '.github/scripts/testflight-asc.mjs'
+      - '.github/workflows/rn-testflight-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Read App Store Connect
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+      BUNDLE_ID: ${{ secrets.BUNDLE_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Print groups, builds and versions
+        run: node .github/scripts/testflight-asc.mjs audit

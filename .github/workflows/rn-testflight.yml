@@ -10,6 +10,10 @@
 #   git push origin HEAD:rn-testflight
 #
 # Build numbers start at 1001, so they stay above every SwiftUI build of this app.
+#
+# The repository variable TESTFLIGHT_INTERNAL_GROUP names the only group meant to receive a
+# build. `guard` stops before the upload if any other group has automatic distribution, and
+# `distribute` gives the processed build to that group. Nothing here can reach the App Store.
 
 name: SkyLens RN TestFlight
 
@@ -21,9 +25,33 @@ on:
 env:
   EXPO_NO_TELEMETRY: '1'
 
+permissions:
+  contents: read
+
 jobs:
+  guard:
+    name: Check who would receive the build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+      BUNDLE_ID: ${{ secrets.BUNDLE_ID }}
+      TESTFLIGHT_GROUP: ${{ vars.TESTFLIGHT_INTERNAL_GROUP }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Stop unless one internal group can receive it
+        run: node .github/scripts/testflight-asc.mjs guard
+
   upload:
     name: Archive and upload
+    needs: guard
     runs-on: macos-26
     timeout-minutes: 100
     defaults:
@@ -146,3 +174,24 @@ jobs:
           name: rn-archive-log
           path: ${{ runner.temp }}/archive.log
           if-no-files-found: ignore
+
+  distribute:
+    name: Give the build to the internal group
+    needs: upload
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+      BUNDLE_ID: ${{ secrets.BUNDLE_ID }}
+      TESTFLIGHT_GROUP: ${{ vars.TESTFLIGHT_INTERNAL_GROUP }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Wait for Apple, then distribute
+        run: BUILD_NUMBER=$((1000 + GITHUB_RUN_NUMBER)) node .github/scripts/testflight-asc.mjs distribute
