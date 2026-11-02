@@ -149,7 +149,7 @@ Pri overovaní som našiel a opravil tieto chyby:
 - Mesiac v lunárnej noci bol čierny kruh. Pribudla slabá hladina svetla a odkaz na plné osvetlenie.
 - Reliéf pri veľkom priblížení vyrábal čierne škvrny z hrubej mriežky výšok.
 
-Jedna nevysvetlená udalosť: v predposlednom úplnom behu raz klepnutie na Jupiter vybralo Venušu. Ďalej som to nezopakoval, v piatich nasledujúcich behoch tohto scenára prešlo. Upravil som poradie výberu, aby disk pod prstom mal prednosť pred cudzím popisom, a scenár teraz pri zlyhaní vypíše presné súradnice. Príčinu však nemám dokázanú, preto si to treba všimnúť pri teste na iPhone.
+Jedna nevysvetlená udalosť: v predposlednom úplnom behu raz klepnutie na Jupiter vybralo Venušu. Ďalej som to nezopakoval, v štyroch nasledujúcich behoch tohto scenára prešlo. Upravil som poradie výberu, aby disk pod prstom mal prednosť pred cudzím popisom, a scenár teraz pri zlyhaní vypíše presné súradnice. Príčinu však nemám dokázanú, preto si to treba všimnúť pri teste na iPhone.
 
 Vizuálne dôkazy sú v `docs/skylens-v1/evidence/stage3/`, 25 stavov. Spoločné prehľady:
 
