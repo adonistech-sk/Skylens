@@ -64,3 +64,17 @@ From `BENCH=1 npx vitest run tests/perf.test.ts`. Hermes has no JIT, so expect e
 ## Bottleneck
 
 Not yet identified on a device. On this PC the star loop takes a fraction of a millisecond while a whole web frame takes about 7 ms, which suggests most of the cost lies elsewhere, but those two figures come from different engines. Whether Skia needs replacing can only be decided from device numbers, so the renderer stays.
+
+## Stage 3 calculations, Node on this PC
+
+A floor, not a device result. No frame rate is claimed from the software-GL web build.
+
+| Work | Time |
+|---|---|
+| `systemScene` | 0.36 ms |
+| `localScene`, Jupiter | 0.16 ms |
+| `visibleFeatures` over 9,087 features | 1.80 ms |
+| `featureAt`, per tap | 6.09 ms |
+| `moonGeometry` | 0.78 ms |
+
+App growth is 6.6 MB: 2.1 MB of planet maps and 4.5 MB for the Moon. Texture memory should peak near 100 MB by arithmetic, with four 2K maps, the Moon base, relief and twelve tiles. It's bounded by `MAX_LARGE` and the tile cache, and hasn't been measured on a device.

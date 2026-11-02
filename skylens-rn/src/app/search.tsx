@@ -6,7 +6,7 @@ import { Category } from '../data/search';
 import { IconButton, Notice, Row } from '../design/components';
 import { Icon } from '../design/Icon';
 import { color, font, type } from '../design/tokens';
-import { CategoryChips, deepNote, RecentRows, ResultRow, useUniversalSearch } from '../features/search/SearchResults';
+import { CategoryChips, deepNote, openLunar, RecentRows, ResultRow, useUniversalSearch } from '../features/search/SearchResults';
 import { rememberRecent } from '../state/store';
 
 const SUGGESTIONS = ['Andromeda Galaxy', 'Orion Nebula', 'Jupiter', 'Betelgeuse', 'Pleiades', 'Saturn'];
@@ -16,7 +16,11 @@ export default function Search() {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<Category | 'All'>('All');
   const { results, deep } = useUniversalSearch(query, category);
-  const open = (id: string) => { rememberRecent(id); router.push({ pathname: '/object/[id]', params: { id } }); };
+  const open = (id: string) => {
+    if (id.startsWith('lunar:')) { openLunar(id); return; }
+    rememberRecent(id);
+    router.push({ pathname: '/object/[id]', params: { id } });
+  };
   const note = deepNote(deep);
 
   return (

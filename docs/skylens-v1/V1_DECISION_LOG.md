@@ -34,6 +34,15 @@ Conflicts between the documents and the repository, each with its resolution. Ro
 | 28 | The view stopped at −20° even with no ground drawn | With ground off the view reaches −89° | Find in Sky has to centre a star below the horizon in Deep Atlas |
 | 29 | Panel drag on the UI thread or the JS thread | JS thread, like the existing sky gestures | Safer without device testing. Revisit if the device test shows lag |
 
+| 30 | 3D renderer | Analytic ray tracing in Skia runtime shaders | Already on TestFlight, adds no native dependency, and every body is an ellipsoid or ring. `expo-gl` with `three`, Filament and WGPU each add native code that can't be verified here |
+| 31 | Moons beyond the Moon and the Galilean four | Left out | JPL mean elements missed by up to 200% of an orbit against Horizons, and JPL says they aren't for position work. An invented position would break the brief |
+| 32 | Distance in illustrative scale | `1.1 · r^0.4`, direction untouched | Neptune's orbit fits a phone in portrait and every planet stays findable |
+| 33 | Which side a planet is seen from on arrival | The sunlit side, 40° from noon | Keeping the overview angle often arrived at a dark disc |
+| 34 | Satellites in true scale inside a planet's own view | Always, whichever overview scale is on | Sizes and distances of moons are then always real, and the screen says so |
+| 35 | Uranus and Neptune colour | Hubble brightness by latitude, overall colour set by hand and stated as approximate | OPAL's composite stretched hue, so Uranus looked cream, and each map shows only one hemisphere |
+| 36 | Moon lighting beyond the terminator | A 5% floor instead of black | A black disc with labels read as a failed screen. The card still says it's night and offers full light |
+| 37 | Bundled map resolution | 8K in 160 tiles, 3.2 MB | Higher needs hosting, which is an owner decision |
+
 ## Features at risk, and how they are protected
 
 | Feature | Risk from Stage 1 | Protection |
@@ -49,7 +58,7 @@ Conflicts between the documents and the repository, each with its resolution. Ro
 
 | Item | Why it is yours | Effect while open |
 |---|---|---|
-| Moon Atlas imagery source | LROC is recorded as restricted in `ASSET_CREDITS.md`, and the audit calls it conditional | Needed before Stage 3 can ship a Moon map |
+| Moon map above 8K | Needs hosting and a download | The atlas stays at 8K, soft at the closest zoom |
 | Hipparcos commercial terms | Legal judgment | Pack and base stars stay in place, release gate open |
 | NGC 2000.0 | Legal judgment, highest priority | No deep-sky expansion. Fallback is OpenNGC, with share-alike review |
 | Meteor shower values from the IMO list | Facts or protected compilation | Stays as shipped, noted in the matrix |

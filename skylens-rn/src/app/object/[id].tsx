@@ -103,6 +103,7 @@ export default function ObjectDetail() {
   const tz = observer.timeZone;
   const rts = info.riseTransitSet;
   const cannotFind = info.location.status === 'unavailable';
+  const bodyId = o.id.startsWith('body:') ? o.id.slice(5) : null;
 
   const find = () => { requestFocus(o.id); router.dismissTo('/sky'); };
   const share = () => Share.share({ message: `${o.name} · ${kindLine(o)}${distance ? ` · ${distance}` : ''}. Seen with SkyLens.` }).catch(() => {});
@@ -130,6 +131,9 @@ export default function ObjectDetail() {
               <Cell line icon="size" label={size ? 'Size (apparent)' : 'Distance'} value={size ?? (ly ? `${Math.round(ly).toLocaleString('en-US')} ly` : '—')} />
               <Cell line icon="diamond" label="Constellation" value={place} />
             </View>
+            {bodyId && bodyId !== 'moon' ? <Row testID="detail-3d" title="Explore in 3D" subtitle="Turn it in the Solar System" onPress={() => router.push({ pathname: '/solar-system', params: { focus: bodyId } })} /> : null}
+            {bodyId === 'moon' ? <Row testID="detail-3d" title="Explore in 3D" subtitle="The Moon and Earth, true to scale" onPress={() => router.push({ pathname: '/solar-system', params: { focus: 'moon' } })} /> : null}
+            {bodyId === 'moon' ? <Row testID="detail-atlas" title="Moon Atlas" subtitle="Explore its surface" last onPress={() => router.push('/moon-atlas')} /> : null}
             {related.length ? (
               <View testID="detail-related" style={{ marginTop: 18 }}>
                 <Text style={type.heading}>Related</Text>

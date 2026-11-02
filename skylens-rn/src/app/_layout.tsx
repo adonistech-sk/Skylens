@@ -52,6 +52,8 @@ export default function RootLayout() {
             <Stack.Screen name="location-search" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="sky-engine" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="list/[id]" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="solar-system" options={{ animation: 'fade' }} />
+            <Stack.Screen name="moon-atlas" options={{ animation: 'fade' }} />
           </Stack>
         </ScreenshotInsets>
       </SafeAreaProvider>

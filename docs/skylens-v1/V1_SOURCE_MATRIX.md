@@ -29,6 +29,19 @@ There are no network calls in the sky, catalog or Tonight code. No analytics SDK
 | Constellation boundaries on screen | The **same** d3-celestial file. Already bundled in the Swift app, newly carried into RN | As the d3-celestial row | Bundled | As that row |
 | Coordinate grids | Computed by Astronomy Engine | MIT | Code | Pass |
 
+## Added by Stage 3
+
+Per-file URL, retrieval date, SHA-256, licence and edits are in `skylens-rn/assets/solar/provenance.json`.
+
+| Data | Provider and version | Licence evidence | Storage | Release gate |
+|---|---|---|---|---|
+| Moon colour map, tiles, elevation | NASA SVS CGI Moon Kit 4720, from LRO LROC WAC and LOLA | NASA credit requested. The page states no explicit licence. Built from PDS-archived data, which the LROC team identifies as public domain | Bundled, 4.0 MB | Pass, credit shown |
+| Lunar feature names | USGS Gazetteer of Planetary Nomenclature, IAU WGPSN, 9,087 features | Public domain per USGS FAQ | Bundled, 0.5 MB | Pass |
+| Mercury, Venus, Mars, Io, Ganymede, Callisto maps | USGS Astrogeology | Public domain on each Astropedia page | Bundled | Pass |
+| Europa map | USGS, Becker et al. 2010 | No constraints stated, cite the authors | Bundled | Pass, cited |
+| Earth maps | NASA Earth Observatory | NASA image use policy | Bundled | Pass, credit shown |
+| Jupiter, Saturn, Uranus, Neptune maps | Hubble OPAL, doi:10.17909/T9G593 | CC BY 4.0, with the required acknowledgment | Bundled | Pass, credit shown |
+
 ## Test-only references, never shipped
 
 | Reference | Version and retrieval | Use | File |

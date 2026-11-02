@@ -1,0 +1,82 @@
+# The Solar System and the Moon Atlas on iOS: opening from Explore, visiting a planet, time
+# and a lunar search. Written for the next iOS run. It has not run yet.
+appId: sk.skylens.app
+---
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: sky-search
+    timeout: 90000
+- runFlow:
+    file: lib/settle.yaml
+    env:
+      WAIT: 5000
+- openLink: skylens://solar-system
+- extendedWaitUntil:
+    visible:
+      id: solar-canvas
+    timeout: 20000
+- runFlow:
+    file: lib/settle.yaml
+    env:
+      WAIT: 5000
+- takeScreenshot: flow_solar_overview
+- tapOn:
+    id: solar-go-jupiter
+- extendedWaitUntil:
+    visible:
+      id: solar-go-io
+    timeout: 12000
+- runFlow:
+    file: lib/settle.yaml
+    env:
+      WAIT: 4000
+- takeScreenshot: flow_solar_jupiter
+- tapOn:
+    id: solar-go-io
+- runFlow:
+    file: lib/settle.yaml
+    env:
+      WAIT: 4000
+- takeScreenshot: flow_solar_io
+- tapOn:
+    id: solar-overview
+- tapOn:
+    id: solar-play
+- runFlow:
+    file: lib/settle.yaml
+    env:
+      WAIT: 3000
+- tapOn:
+    id: solar-play
+- tapOn:
+    id: solar-now
+- takeScreenshot: flow_solar_time
+- openLink: skylens://moon-atlas
+- extendedWaitUntil:
+    visible:
+      id: moon-canvas
+    timeout: 20000
+- runFlow:
+    file: lib/settle.yaml
+    env:
+      WAIT: 5000
+- takeScreenshot: flow_moon_globe
+- tapOn:
+    id: moon-search
+- inputText: "Tycho"
+- extendedWaitUntil:
+    visible:
+      id: moon-result-Tycho
+    timeout: 8000
+- tapOn:
+    id: moon-result-Tycho
+- extendedWaitUntil:
+    visible:
+      id: moon-card
+    timeout: 8000
+- runFlow:
+    file: lib/settle.yaml
+    env:
+      WAIT: 4000
+- takeScreenshot: flow_moon_tycho

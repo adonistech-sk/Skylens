@@ -117,3 +117,17 @@ Web and logic evidence unless stated. **No iOS run.** Results and iOS risks are 
 | Find in Sky with moving targets and directions | Tested logic, Tested web. Compass untested |
 | Contextual discovery | Tested logic, Tested web |
 | Lists | Tested web, Tested logic |
+
+## SkyLens V1 Stage 3
+
+Web and logic evidence unless stated. **No iOS run.** Results and iOS risks are in `../docs/skylens-v1/V1_STAGE3_REPORT.md`.
+
+| Area | Status |
+|---|---|
+| 3D Solar System, scales, time, moons | Tested logic, Tested web. iOS shaders and gestures unproven |
+| Planet and moon positions | Tested against JPL Horizons |
+| Moon Atlas globe, tiles, layers | Tested web, Tested logic. iOS shaders unproven |
+| Lunar catalog and universal search | Tested logic, Tested web |
+| Phase, terminator, Earth view | Tested against JPL Horizons, Tested web |
+| Asset provenance | Checksums tested against the shipped files |
+| Moons beyond the Galilean four | Not built. No verified model |

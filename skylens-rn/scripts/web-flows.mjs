@@ -29,7 +29,7 @@ const flow = async (name, fn) => {
   }
   await page.close();
 };
-const open = (page, route, demo = true) => page.goto(`${base}/${route}${demo ? '?demo=1' : ''}`, { waitUntil: 'load', timeout: 120000 });
+const open = (page, route, demo = true) => page.goto(`${base}/${route}${demo ? `${route.includes('?') ? '&' : '?'}demo=1` : ''}`, { waitUntil: 'load', timeout: 120000 });
 const id = (page, testId) => page.getByTestId(testId);
 const text = (page, t) => page.getByText(t, { exact: false }).first();
 const visible = (l, timeout = 20000) => l.waitFor({ state: 'visible', timeout });
@@ -722,6 +722,292 @@ await flow('coming back from a detail page returns the same sky, time, mode and 
   await p.waitForTimeout(800);
   if (!same(before, await viewOf(p))) throw new Error('the view changed');
   if (label !== await id(p, 'sky-selection').getAttribute('aria-label')) throw new Error('the selection changed');
+});
+
+// ---- Stage 3 ----
+
+const solarReady = async (p, route = 'solar-system') => {
+  await open(p, route);
+  await visible(id(p, 'solar-canvas'), 40000);
+  await p.waitForFunction(() => globalThis.__solarProbe?.camera(), null, { timeout: 40000 });
+  await p.waitForTimeout(1500);
+};
+const moonReady = async (p, route = 'moon-atlas') => {
+  await open(p, route);
+  await visible(id(p, 'moon-canvas'), 40000);
+  await p.waitForFunction(() => globalThis.__moonProbe?.camera(), null, { timeout: 40000 });
+  await p.waitForTimeout(1500);
+};
+const solarCam = (p) => p.evaluate(() => globalThis.__solarProbe.camera());
+const moonCam = (p) => p.evaluate(() => globalThis.__moonProbe.camera());
+const tapBody = async (p, body) => {
+  const at = await p.evaluate((b) => globalThis.__solarProbe.point(b), body);
+  await id(p, 'solar-canvas').click({ position: { x: at.x, y: at.y } });
+};
+const textOf = (p, t) => id(p, t).innerText();
+
+await flow('stage3 Solar System opens from Explore and labels each scale plainly', async (p) => {
+  await open(p, 'explore');
+  await p.getByRole('tab', { name: 'Solar System' }).click();
+  await id(p, 'open-solar-system').click();
+  await visible(id(p, 'solar-canvas'), 40000);
+  await p.waitForFunction(() => globalThis.__solarProbe?.camera(), null, { timeout: 40000 });
+  if (!/Illustrative scale.*compressed/.test(await textOf(p, 'solar-scale-note'))) throw new Error('the illustrative scale is not stated');
+  const before = await solarCam(p);
+  await p.getByRole('tab', { name: 'True scale' }).click();
+  await p.waitForTimeout(600);
+  if (!/True scale.*real/.test(await textOf(p, 'solar-scale-note'))) throw new Error('the true scale is not stated');
+  if ((await solarCam(p)).distance <= before.distance) throw new Error('true scale did not pull back');
+});
+
+await flow('stage3 tapping a planet selects it, Visit focuses it, Details and Back keep the place', async (p) => {
+  await solarReady(p);
+  await tapBody(p, 'jupiter');
+  await visible(id(p, 'solar-card'));
+  const facts = await textOf(p, 'solar-card');
+  if (!/Jupiter[\s\S]*71,492 km radius[\s\S]*AU from the Sun/.test(facts)) throw new Error(`the card facts are wrong: ${JSON.stringify(await p.evaluate(() => [globalThis.__solarProbe.lastTap(), globalThis.__solarProbe.point('jupiter'), globalThis.__solarProbe.camera()]))} ${facts.slice(0, 20)}`);
+  await id(p, 'solar-focus').click();
+  await p.waitForFunction(() => globalThis.__solarProbe.scene().focus === 'jupiter', null, { timeout: 15000 });
+  await visible(id(p, 'solar-go-io'));
+  await id(p, 'solar-details').click();
+  await visible(id(p, 'find-in-sky'));
+  await p.locator('[aria-label="Back"]').first().click();
+  await visible(id(p, 'solar-go-io'));
+  await id(p, 'solar-overview').click();
+  await p.waitForFunction(() => globalThis.__solarProbe.scene().kind === 'system', null, { timeout: 15000 });
+  await visible(id(p, 'solar-go-mars'));
+});
+
+await flow('stage3 a tap on empty space clears the selection', async (p) => {
+  await solarReady(p);
+  await tapBody(p, 'jupiter');
+  await visible(id(p, 'solar-card'));
+  await id(p, 'solar-canvas').click({ position: { x: 20, y: 300 } });
+  await id(p, 'solar-card').waitFor({ state: 'hidden', timeout: 8000 });
+});
+
+await flow('stage3 moons exist only where verified and open at true scale', async (p) => {
+  await solarReady(p);
+  await id(p, 'solar-go-earth').click();
+  await p.waitForFunction(() => globalThis.__solarProbe.scene().focus === 'earth', null, { timeout: 15000 });
+  await id(p, 'solar-go-moon').click();
+  await p.waitForFunction(() => globalThis.__solarProbe.scene().focus === 'moon', null, { timeout: 15000 });
+  await visible(id(p, 'solar-atlas'));
+  if (!/km from Earth/.test(await textOf(p, 'solar-card'))) throw new Error('the Moon\'s distance is missing');
+  await id(p, 'solar-atlas').click();
+  await visible(id(p, 'moon-canvas'), 40000);
+  await solarReady(p, 'solar-system?focus=europa');
+  await p.waitForFunction(() => globalThis.__solarProbe.scene().focus === 'europa', null, { timeout: 15000 });
+  await visible(text(p, 'km from Jupiter'));
+  await solarReady(p, 'solar-system?focus=mars');
+  await p.waitForTimeout(800);
+  if (await id(p, 'solar-go-phobos').count()) throw new Error('an unverified moon is offered');
+});
+
+await flow('stage3 time plays, moves real positions, and returns to now', async (p) => {
+  await solarReady(p);
+  const where = () => p.evaluate(() => globalThis.__solarProbe.point('earth'));
+  const a = await where(), dateA = await textOf(p, 'solar-date');
+  await id(p, 'solar-speed').click();
+  await id(p, 'solar-speed').click();
+  if (!/month/.test(await textOf(p, 'solar-speed'))) throw new Error('the speed did not change');
+  await id(p, 'solar-play').click();
+  await p.waitForTimeout(1800);
+  await id(p, 'solar-play').click();
+  await p.waitForTimeout(400);
+  const b = await where();
+  if (Math.hypot(a.x - b.x, a.y - b.y) < 5) throw new Error('Earth did not move');
+  if ((await textOf(p, 'solar-date')) === dateA) throw new Error('the date did not move');
+  await id(p, 'solar-now').click();
+  await p.waitForTimeout(500);
+  if ((await textOf(p, 'solar-date')) !== dateA) throw new Error('Now did not return');
+});
+
+await flow('stage3 simulated time stays shared with the sky, and is left paused', async (p) => {
+  await solarReady(p);
+  const date = (await textOf(p, 'solar-date')).split(' · ')[0];
+  await id(p, 'solar-play').click();
+  await p.waitForTimeout(500);
+  await id(p, 'solar-close').click();
+  await p.waitForTimeout(500);
+  const clock = await p.evaluate(() => globalThis.__solarProbe.clock());
+  if (clock.rate !== 0) throw new Error('the clock was left running');
+  if (!date) throw new Error('no date');
+});
+
+await flow('stage3 the Moon Atlas shows the same moment as the Solar System', async (p) => {
+  await solarReady(p, 'solar-system?focus=moon');
+  await p.waitForFunction(() => globalThis.__solarProbe.scene().focus === 'moon', null, { timeout: 15000 });
+  await id(p, 'solar-play').click();
+  await p.waitForTimeout(1500);
+  await id(p, 'solar-play').click();
+  await p.waitForTimeout(300);
+  const date = await textOf(p, 'solar-date');
+  await id(p, 'solar-atlas').click();
+  await visible(id(p, 'moon-date'), 40000);
+  if ((await textOf(p, 'moon-date')) !== date) throw new Error('the two screens disagree on the time');
+});
+
+await flow('stage3 drag turns the view and options change what is drawn', async (p) => {
+  await solarReady(p);
+  const before = await solarCam(p);
+  await p.mouse.move(200, 560);
+  await p.mouse.down();
+  await p.mouse.move(120, 520, { steps: 8 });
+  await p.mouse.up();
+  await p.waitForTimeout(300);
+  const after = await solarCam(p);
+  if (Math.abs(after.yaw - before.yaw) < 5 || Math.abs(after.pitch - before.pitch) < 2) throw new Error('the drag did not turn the view');
+  const labels = () => p.evaluate(() => globalThis.__solarProbe.labels);
+  if (!(await labels())) throw new Error('no labels');
+  await id(p, 'solar-options').click();
+  await visible(id(p, 'solar-options-panel'));
+  await p.locator('[aria-label="Labels"]').first().click();
+  await p.waitForTimeout(500);
+  if (await labels()) throw new Error('labels stayed on');
+});
+
+await flow('stage3 Object Detail links to 3D, the atlas, and Find in Sky from 3D works', async (p) => {
+  await open(p, 'object/body:moon');
+  await visible(id(p, 'detail-atlas'));
+  await id(p, 'detail-atlas').click();
+  await visible(id(p, 'moon-canvas'), 40000);
+  await open(p, 'object/body:mars');
+  await id(p, 'detail-3d').click();
+  await visible(id(p, 'solar-canvas'), 40000);
+  await p.waitForFunction(() => globalThis.__solarProbe?.scene().focus === 'mars', null, { timeout: 20000 });
+  await id(p, 'solar-find').click();
+  await visible(id(p, 'sky-selection'), 30000);
+  if (!/Mars/.test(await id(p, 'sky-selection').getAttribute('aria-label'))) throw new Error('Mars is not the selection');
+  const body = await p.locator('body').innerText();
+  if (/NaN|undefined/.test(body)) throw new Error('a missing value reached the screen');
+});
+
+await flow('stage3 Moon Atlas search finds Tycho and shows real facts on the right spot', async (p) => {
+  await moonReady(p);
+  await id(p, 'moon-search').click();
+  await id(p, 'moon-search-input').fill('tycho');
+  await visible(id(p, 'moon-result-Tycho'));
+  await id(p, 'moon-result-Tycho').click();
+  await visible(id(p, 'moon-card'));
+  const card = await textOf(p, 'moon-card');
+  for (const want of ['Crater', '85 km across', '43.3° S, 11.2° W', 'Tycho Brahe', 'Gazetteer']) if (!card.includes(want)) throw new Error(`card lacks ${want}`);
+  await p.waitForTimeout(600);
+  const c = await moonCam(p);
+  if (Math.abs(c.pitch + 43.3) > 0.2 || Math.abs(c.yaw + 11.2) > 0.2) throw new Error('the camera did not centre Tycho');
+  const at = await p.evaluate(() => globalThis.__moonProbe.point(-43.3, -11.2));
+  if (Math.abs(at.x - 196.5) > 2) throw new Error('Tycho is not at the centre');
+  const l = await p.evaluate(() => { const m = globalThis.__moonProbe; return { level: m.level, slots: m.slots, tiles: m.tilesLoaded }; });
+  if (l.level < 1) throw new Error('no detail level at this zoom');
+  await p.waitForFunction(() => globalThis.__moonProbe.tilesLoaded > 0, null, { timeout: 15000 });
+});
+
+await flow('stage3 the Moon Atlas follows the shared clock: phase, lighting and Earth view', async (p) => {
+  await moonReady(p);
+  const before = await textOf(p, 'moon-phase');
+  await id(p, 'moon-day-forward').click();
+  await id(p, 'moon-day-forward').click();
+  await id(p, 'moon-day-forward').click();
+  await p.waitForTimeout(500);
+  const after = await textOf(p, 'moon-phase');
+  if (before === after) throw new Error('the phase did not follow the clock');
+  await id(p, 'moon-canvas').click({ position: { x: 196, y: 400 } });
+  await id(p, 'moon-earth-view').click();
+  await p.waitForTimeout(600);
+  const c = await moonCam(p);
+  if (Math.abs(c.pitch) > 8 || Math.abs(((c.yaw + 540) % 360) - 180) > 9 || !c.roll) throw new Error('Earth view is not libration-aligned');
+});
+
+await flow('stage3 atlas labels select features and layers really change', async (p) => {
+  await moonReady(p);
+  const label = await p.evaluate(() => globalThis.__moonProbe.labels.find((l) => l.text === 'Mare Imbrium'));
+  if (!label) throw new Error('Mare Imbrium has no label');
+  await id(p, 'moon-canvas').click({ position: { x: label.x, y: label.y } });
+  await visible(id(p, 'moon-card'));
+  if (!(await textOf(p, 'moon-card')).includes('Mare Imbrium')) throw new Error('the label chose another feature');
+  await id(p, 'moon-deselect').click();
+  await id(p, 'moon-layers').click();
+  await visible(id(p, 'moon-layers-panel'));
+  await id(p, 'moon-elevation').click();
+  await visible(id(p, 'moon-legend'));
+  await id(p, 'moon-labels').click();
+  await p.waitForTimeout(500);
+  if ((await p.evaluate(() => globalThis.__moonProbe.labels.length)) !== 0) throw new Error('labels stayed on');
+});
+
+await flow('stage3 universal search reaches lunar features and they open in the atlas', async (p) => {
+  await open(p, 'search');
+  await id(p, 'search-input').fill('Copernicus');
+  const crater = p.locator('[aria-label^="Copernicus, Crater on the Moon"]').first();
+  await visible(crater, 30000);
+  await crater.click();
+  await visible(id(p, 'moon-card'), 40000);
+  if (!(await textOf(p, 'moon-card')).includes('Copernicus')) throw new Error('the atlas did not open on it');
+  await open(p, 'search');
+  await id(p, 'search-input').fill('Jupiter');
+  await visible(id(p, 'result-Jupiter'), 30000);
+});
+
+await flow('stage3 the sky panel reaches both new screens', async (p) => {
+  await skyReady(p);
+  await id(p, 'sheet-handle').click();
+  await visible(id(p, 'sheet-grabber'));
+  await id(p, 'sheet-grabber').click();
+  await visible(id(p, 'sheet-browse-solar'));
+  await id(p, 'sheet-browse-solar').click();
+  await visible(id(p, 'solar-canvas'), 40000);
+  await id(p, 'solar-close').click();
+  await visible(id(p, 'sheet-browse-moon'));
+  await id(p, 'sheet-browse-moon').click();
+  await visible(id(p, 'moon-canvas'), 40000);
+});
+
+await flow('stage3 a pinch zooms both the system and the Moon', async (p) => {
+  const pinch = async (from, to) => {
+    const cdp = await p.context().newCDPSession(p);
+    const pts = (d) => [{ x: 196 - d / 2, y: 420 }, { x: 196 + d / 2, y: 420 }];
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: pts(from) });
+    for (let i = 1; i <= 30; i++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: pts(from + ((to - from) * i) / 30) }); await p.waitForTimeout(16); }
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await p.waitForTimeout(500);
+  };
+  await solarReady(p);
+  const a = await solarCam(p);
+  await pinch(80, 240);
+  const b = await solarCam(p);
+  if (b.distance >= a.distance * 0.6) throw new Error('the system did not zoom in');
+  await solarReady(p, 'solar-system?focus=jupiter');
+  const c = await solarCam(p);
+  await pinch(240, 40);
+  if ((await solarCam(p)).distance <= c.distance * 2) throw new Error('the local view did not pull back');
+  await moonReady(p);
+  const m = await moonCam(p);
+  await pinch(60, 280);
+  const n = await moonCam(p);
+  if (n.distance >= m.distance * 0.6) throw new Error('the Moon did not zoom in');
+  if (await p.evaluate(() => globalThis.__moonProbe.level) === 0) throw new Error('zooming in did not raise the map detail');
+});
+
+await flow('stage3 without tiles or textures both screens still work on the base data', async (p) => {
+  await p.route(/moon-tiles|assets\/solar/, (r) => r.abort());
+  await moonReady(p);
+  await id(p, 'moon-search').click();
+  await id(p, 'moon-search-input').fill('tycho');
+  await id(p, 'moon-result-Tycho').click();
+  await visible(id(p, 'moon-card'));
+  await p.waitForTimeout(1200);
+  if ((await p.evaluate(() => globalThis.__moonProbe.tilesLoaded)) !== 0) throw new Error('tiles should be absent');
+  await solarReady(p);
+  await id(p, 'solar-go-jupiter').click();
+  await p.waitForFunction(() => globalThis.__solarProbe.scene().focus === 'jupiter', null, { timeout: 15000 });
+  await p.waitForTimeout(800);
+  if (!(await p.evaluate(() => globalThis.__solarProbe.drawn))) throw new Error('no plain globe was drawn');
+});
+
+await flow('stage3 a missing catalog is stated and the map still turns', async (p) => {
+  await p.route(/moon-features/, (r) => r.abort());
+  await moonReady(p);
+  await visible(text(p, 'feature catalog couldn'));
 });
 
 await browser.close();

@@ -66,9 +66,9 @@ Audited from the repository on 2026-11-01. Baseline commit `ff8ab8e`, tagged `sk
 
 | ID | Status | Evidence and gap |
 |---|---|---|
-| SOL-001 3D Solar System | `MISSING` | Stage 3 |
+| SOL-001 3D Solar System | `PARTIAL` | Built, Stage 3. Web and logic evidence, iOS pending |
 | SOL-002 Planet and moon details | `PARTIAL` | Planets via Object Detail. Natural satellites absent |
-| SOL-003 Moon Atlas | `MISSING` | Stage 3. Asset rights undecided, see decision log |
+| SOL-003 Moon Atlas | `PARTIAL` | Built, Stage 3. Rights recorded per file. Web and logic evidence, iOS pending |
 | SOL-004 3D object explorer | `MISSING` | P1 |
 
 ## WP4 — Live Universe
@@ -108,7 +108,7 @@ Audited from the repository on 2026-11-01. Baseline commit `ff8ab8e`, tagged `sk
 | J03 Deep Atlas search | `MISSING` | Search IDs work. No Deep Atlas |
 | J04 Tonight to Observe | `PARTIAL` | No altitude graph, plan or reminder |
 | J05 Time Travel | `VERIFIED_IMPLEMENTED` | iOS flow `maestro/02_time_travel.yaml`, one clock in `store.ts` |
-| J06 Planet and Moon | `MISSING` | Stage 3 |
+| J06 Planet and Moon | `PARTIAL` | Web flows pass, Stage 3. iOS pending |
 | J07 Satellite pass | `MISSING` | Stage 4 |
 | J08 Guided tour | `MISSING` | Stage 6 |
 | J09 Photo planning | `MISSING` | Stage 5 |

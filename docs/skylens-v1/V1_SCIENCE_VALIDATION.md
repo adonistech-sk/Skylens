@@ -76,3 +76,20 @@ These compare against published values or the engine rather than a new JPL pull.
 | Accuracy of the sky against the real sky outdoors | Needs a device and a clear night |
 | Compass and AR alignment | `DEVICE_NOT_TESTED` |
 | Satellites, comets, lunar landmarks | Not built yet |
+
+## Added in Stage 3
+
+Against JPL Horizons, `skylens-rn/tests/fixtures/horizons-solar-v1.json`. Each quantity is compared on five dates from 1900 to 2100. Results are in `V1_STAGE3_REPORT.md`.
+
+| Check | Worst | Limit |
+|---|---|---|
+| Heliocentric planets | 15.4″ | 20″ |
+| Geocentric Moon | 11.6 km | 15 km |
+| Galilean moons | under 460 km | 500 km |
+| Planet prime meridians | 0.01° | 0.05° |
+| Lunar sub-Earth point | 0.006° | 0.01° |
+| Lunar sub-solar point | 0.0014° | 0.01° |
+| Moon illumination | 0.01 points | 0.05 |
+| Lunar pole position angle | 0.003° | 0.02° |
+
+Mean-element satellite models failed, up to 200% of an orbit, and were removed. The longitude direction of the Galilean moon maps isn't independently tested.

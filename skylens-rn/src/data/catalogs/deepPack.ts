@@ -8,6 +8,8 @@ import { CELL_COUNT, crc32, GRID_SIDE, PACK_DIRECTORY_ENTRY, PACK_HEADER, PACK_M
 export interface PackStorage {
   read(offset: number, length: number): Promise<Uint8Array>;
   close?(): void;
+  /** Bytes in the whole file, when the storage knows it. */
+  size?: number;
 }
 
 export interface StarRow { hip: number; ra: number; dec: number; pmRA: number; pmDec: number; parallax: number; mag: number; bv: number }

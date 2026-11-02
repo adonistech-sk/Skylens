@@ -18,7 +18,7 @@ import { color, font, type } from '../../design/tokens';
 import { formatShortDate, formatTime } from '../../state/format';
 import { rememberRecent, requestFocus, resetToNow, skyTime, useObserver, useStore } from '../../state/store';
 import { useEvents } from '../events/useEvents';
-import { CategoryChips, deepNote, RecentRows, ResultRow, useUniversalSearch } from '../search/SearchResults';
+import { CategoryChips, deepNote, openLunar, RecentRows, ResultRow, useUniversalSearch } from '../search/SearchResults';
 import { clampTop, Detent, panelStops, restingDetent } from './detents';
 import { discover, Suggestion } from './discovery';
 import { frameBrightness } from './renderer';
@@ -174,6 +174,7 @@ export function SkySheet({ handleRef, detent, onDetent, dockBottom, topInset, ca
   const docked = open ? null : card(false);
 
   const pick = (id: string) => {
+    if (id.startsWith('lunar:')) { openLunar(id); return; }
     rememberRecent(id);
     ensureObject(id).then((o) => { if (o) { requestFocus(id); onDetent('collapsed'); } }).catch(() => {});
   };
@@ -256,6 +257,8 @@ export function SkySheet({ handleRef, detent, onDetent, dockBottom, topInset, ca
                     <EventsSection />
                     <Text style={styles.section}>Browse</Text>
                     <Row testID="sheet-browse-explore" title="Planets and the Moon" subtitle="Where each one is now" onPress={() => router.push('/explore')} />
+                    <Row testID="sheet-browse-solar" title="Solar System in 3D" subtitle="Move through time and visit a planet" onPress={() => router.push('/solar-system')} />
+                    <Row testID="sheet-browse-moon" title="Moon Atlas" subtitle="Craters, seas and mountains" onPress={() => router.push('/moon-atlas')} />
                     <Row title="All 88 constellations" onPress={() => router.push({ pathname: '/category/[key]', params: { key: 'constellations' } })} />
                     <Row title="Messier objects" subtitle="The classic deep-sky list" last onPress={() => router.push({ pathname: '/category/[key]', params: { key: 'deepsky' } })} />
                   </>

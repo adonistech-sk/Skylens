@@ -75,3 +75,20 @@ Bugs this work found:
 - **Two selection cards were mounted at once.** Only a browser test counting elements showed it.
 - **Observe suggested Neptune.** Magnitude 7.9 isn't naked-eye.
 - **Step arrows didn't reverse,** because each step reordered the list.
+
+## V1 Stage 3
+
+| Check | Command | Result |
+|---|---|---|
+| Scene, picking, atlas, tile pack | `npx vitest run tests/stage3.test.ts` | Runs against the real shipped catalog and pack |
+| JPL comparisons | `npx vitest run tests/solar-v1.test.ts` | Horizons fixtures |
+| Captures | `node scripts/web-stage3.mjs <out>` | Web only, 25 states |
+| Stage 3 browser flows | `ONLY=stage3 node scripts/web-flows.mjs <out>` | Skips the rest |
+
+Rebuilding the maps needs the sources from `scripts/reference/fetch-solar-sources.mjs`, then `node scripts/build-solar-assets.mjs <sourceDir>`.
+
+Bugs this work found:
+
+- **A tap on Jupiter selected Mars.** The nearest body in a finger's reach beat the disc under the finger.
+- **SkSL rejected the first shaders,** over the reserved names `sample` and `out`, and a shader passed to a function. CanvasKit's error callback names the line.
+- **Uranus looked cream,** with a dark unobserved hemisphere that would have read as surface.

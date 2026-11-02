@@ -4,11 +4,11 @@
 import { ALL_BODIES, bodyName } from '../astronomy/core';
 import { constellations, deepSky, genitiveOf, starMetaEntries, stars } from './catalog';
 
-export type Category = 'Solar System' | 'Stars' | 'Constellations' | 'Deep Sky';
+export type Category = 'Solar System' | 'Stars' | 'Constellations' | 'Deep Sky' | 'Moon';
 
 interface Entry { id: string; name: string; aliases: string[]; category: Category; popularity: number }
 interface Term { text: string; words: string[]; primary: boolean; display: string; entry: number }
-export interface SearchResult { id: string; name: string; matchedAlias: string | null; category: Category; score: number }
+export interface SearchResult { id: string; name: string; matchedAlias: string | null; category: Category; score: number; /** Replaces the catalog's type line. */ detail?: string }
 
 const GREEK: Record<string, string> = {
   α: 'alpha', β: 'beta', γ: 'gamma', δ: 'delta', ε: 'epsilon', ζ: 'zeta', η: 'eta', θ: 'theta', ι: 'iota', κ: 'kappa', λ: 'lambda', μ: 'mu',

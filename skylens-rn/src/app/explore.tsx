@@ -52,6 +52,8 @@ export default function Explore() {
         </Reveal>
       ) : mode === 'solar' ? (
         <Reveal key="solar" fade style={styles.rows}>
+          <Row testID="open-solar-system" leading={<ObjectThumb object={bodyObject('saturn')} />} title="Solar System in 3D" subtitle="Every planet where it is now" onPress={() => router.push('/solar-system')} />
+          <Row testID="open-moon-atlas" leading={<ObjectThumb object={bodyObject('moon')} />} title="Moon Atlas" subtitle="9,087 named features on a true globe" onPress={() => router.push('/moon-atlas')} />
           {solar.map((s, i) => (
             <Row key={s.body} testID={`solar-${s.body}`} leading={<ObjectThumb object={bodyObject(s.body)} />} title={bodyObject(s.body).name} subtitle={s.line} last={i === solar.length - 1} onPress={() => open(bodyObject(s.body))} />
           ))}

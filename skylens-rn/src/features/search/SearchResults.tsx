@@ -1,16 +1,25 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { object, TYPE_NAMES } from '../../data/catalog';
+import { router } from 'expo-router';
+import { bodyObject, object, TYPE_NAMES } from '../../data/catalog';
 import { loadDeepSearch } from '../../data/catalogs/runtime';
-import { Category, prepareSearch, search, SearchResult } from '../../data/search';
+import { Category, normalize, prepareSearch, search, SearchResult } from '../../data/search';
 import { Row } from '../../design/components';
 import { ObjectThumb } from '../../design/Screen';
 import { color, font, type } from '../../design/tokens';
+import { FeatureIndex, featureType } from '../moon/moonData';
+import { loadLunarFeatures } from '../moon/moonStore';
 import { clearRecents, useStore } from '../../state/store';
 
-export const CATEGORIES: (Category | 'All')[] = ['All', 'Solar System', 'Stars', 'Constellations', 'Deep Sky'];
+export const CATEGORIES: (Category | 'All')[] = ['All', 'Solar System', 'Moon', 'Stars', 'Constellations', 'Deep Sky'];
 
 export type DeepSearchState = 'loading' | 'ready' | 'failed';
+
+/** Lunar features live in the atlas, which opens centred on the one chosen. */
+export const openLunar = (id: string) => router.push({ pathname: '/moon-atlas', params: { feature: id } });
+
+const lunarResults = (index: FeatureIndex | null, query: string, limit: number): SearchResult[] =>
+  (index ? index.search(query, limit) : []).map((f, i) => ({ id: f.id, name: f.name, matchedAlias: null, category: 'Moon', score: 1 - i / 100, detail: `${featureType(f.code)} on the Moon${f.diameter ? ` · ${f.diameter >= 10 ? Math.round(f.diameter) : f.diameter.toFixed(1)} km` : ''}` }));
 
 /** Search across every catalog. Bundled results are immediate, the pack joins when it's read. */
 export function useUniversalSearch(query: string, category: Category | 'All', limit = 30) {
@@ -24,7 +33,21 @@ export function useUniversalSearch(query: string, category: Category | 'All', li
     }, 0);
     return () => { live = false; clearTimeout(id); };
   }, []);
-  const results = useMemo(() => search(query, limit, category === 'All' ? undefined : category), [query, category, limit, deep]);
+  const [lunar, setLunar] = useState<FeatureIndex | null>(null);
+  useEffect(() => {
+    let live = true;
+    const id = setTimeout(() => { loadLunarFeatures().then((i) => { if (live) setLunar(i); }); }, 0);
+    return () => { live = false; clearTimeout(id); };
+  }, []);
+  const results = useMemo(() => {
+    if (category === 'Moon') return lunarResults(lunar, query, limit);
+    const sky = search(query, limit, category === 'All' ? undefined : category);
+    // Sky objects keep first place: lunar names follow unless the name is an exact match.
+    if (category !== 'All') return sky;
+    const moon = lunarResults(lunar, query, 6);
+    const exact = moon.filter((m) => normalize(m.name) === normalize(query));
+    return [...exact, ...sky, ...moon.filter((m) => !exact.includes(m))].slice(0, limit);
+  }, [query, category, limit, deep, lunar]);
   return { results, deep };
 }
 
@@ -45,9 +68,10 @@ export function CategoryChips({ value, onChange }: { value: Category | 'All'; on
 
 export function ResultRow({ item, last, onPress }: { item: SearchResult; last?: boolean; onPress: () => void }) {
   const o = object(item.id);
-  const kind = o ? TYPE_NAMES[o.type] : item.category;
+  const kind = item.detail ?? (o ? TYPE_NAMES[o.type] : item.category);
+  const lunar = item.id.startsWith('lunar:');
   return (
-    <Row testID={`result-${item.name}`} leading={o ? <ObjectThumb object={o} size={46} /> : <View style={styles.blank} />} title={item.name}
+    <Row testID={`result-${item.name}`} leading={o ? <ObjectThumb object={o} size={46} /> : lunar ? <ObjectThumb object={bodyObject('moon')} size={46} /> : <View style={styles.blank} />} title={item.name}
       subtitle={item.matchedAlias ? `${item.matchedAlias} · ${kind}` : kind} last={last} onPress={onPress} />
   );
 }

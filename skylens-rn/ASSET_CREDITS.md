@@ -29,6 +29,24 @@ Machine-readable sources, URLs and verification notes are in `assets/asset-manif
 | Sky | `assets/sky/horizon.png`, `star-sprite.png` | Drawn by `scripts/make-sky-assets.mjs` | Original | Project-owned | Horizon also serves as the framing landscape |
 | Screenshot mode only | `ar-standin.jpg` | Generated with Nano Banana 2.1 through Magnific | Project artwork | **Confirm the provider's commercial terms** | Never shown outside test mode, labelled on screen |
 
+## Solar System and Moon Atlas maps
+
+Every file's source URL, retrieval date, SHA-256, licence and edits are in `assets/solar/provenance.json`, and `tests/solar-v1.test.ts` checks the checksums against the shipped files. `scripts/build-solar-assets.mjs` rebuilds them.
+
+| File | Source | Credit | Licence |
+|---|---|---|---|
+| `assets/solar/mercury*.jpg` | USGS MESSENGER MDIS global mosaic | USGS Astrogeology, NASA MESSENGER | Public domain |
+| `assets/solar/venus*.jpg` | USGS Magellan C3-MDIR synthetic colour | USGS Astrogeology, NASA Magellan | Public domain |
+| `assets/solar/mars*.jpg` | USGS Viking colorized mosaic | USGS Astrogeology, NASA Viking, NASA Ames | Public domain |
+| `assets/solar/earth*.jpg`, `earth-night.jpg` | NASA Visible Earth | NASA Earth Observatory, R. Stöckli; Suomi NPP VIIRS | NASA imagery, credit given |
+| `assets/solar/jupiter*.jpg`, `saturn*.jpg`, `uranus.jpg`, `neptune.jpg` | MAST HLSP OPAL | OPAL, PI Simon, doi:10.17909/T9G593 | CC BY 4.0, acknowledgment required |
+| `assets/solar/io.jpg`, `ganymede.jpg`, `callisto.jpg` | USGS global mosaics | USGS Astrogeology, NASA Galileo, Voyager | Public domain |
+| `assets/solar/europa.jpg` | USGS global mosaic | Becker et al. 2010, USGS Astrogeology | No constraints stated, cite the authors |
+| `assets/moon/moon-base.jpg`, `moon-s.jpg`, `moon-tiles-v1.db`, `moon-dem-v1.db`, `moon-relief.jpg` | NASA SVS CGI Moon Kit (svs.gsfc.nasa.gov/4720) | NASA's Scientific Visualization Studio; LRO LROC WAC, LOLA | NASA, credit given; built from PDS-archived LRO data |
+| `assets/moon/moon-features-v1.db` | USGS Gazetteer of Planetary Nomenclature | IAU WGPSN, USGS Astrogeology | Public domain |
+
+The SVS page says its maps are optimised for appearance, not science. Feature positions come from the Gazetteer, and the tests confirm that named basins sit in the right places on the map. Curated LROC website images are not used.
+
 ## Fonts
 
 Newsreader and Inter, both SIL Open Font License 1.1, from `@expo-google-fonts`. The spec suggested Instrument Serif, but Newsreader Regular was much closer to the reference at side-by-side comparison.
