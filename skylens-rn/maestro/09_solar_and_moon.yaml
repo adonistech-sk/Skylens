@@ -1,5 +1,5 @@
 # The Solar System and the Moon Atlas on iOS: opening from Explore, visiting a planet, time
-# and a lunar search. Written for the next iOS run. It has not run yet.
+# and a lunar search.
 appId: sk.skylens.app
 ---
 - launchApp

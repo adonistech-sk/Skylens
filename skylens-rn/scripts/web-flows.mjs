@@ -13,6 +13,26 @@ const browser = await chromium.launch({
   args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
 });
 const ctx = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 2 });
+// Native Skia throws on an empty drawPoints and web Skia doesn't, which once hid an iOS crash
+// behind a clean browser run. This makes the web behave like the phone.
+await ctx.addInitScript(() => {
+  let kit;
+  Object.defineProperty(globalThis, 'CanvasKit', {
+    configurable: true,
+    get: () => kit,
+    set(value) {
+      kit = value;
+      const proto = value?.Canvas?.prototype;
+      if (!proto || proto.strictPoints) return;
+      proto.strictPoints = true;
+      const drawPoints = proto.drawPoints;
+      proto.drawPoints = function (mode, points, paint) {
+        if (!points?.length) throw new Error('Points array must not be empty');
+        return drawPoints.call(this, mode, points, paint);
+      };
+    },
+  });
+});
 const results = [];
 const flow = async (name, fn) => {
   if (process.env.ONLY && !name.includes(process.env.ONLY)) return;

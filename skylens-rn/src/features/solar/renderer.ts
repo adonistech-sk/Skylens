@@ -70,6 +70,8 @@ function drawBackdrop(canvas: SkCanvas, c: OrbitCamera, b: CameraBasis, toEquato
       const p = projectDirection(c, b, mul(fromEquatorial, [s.xyz[i * 3], s.xyz[i * 3 + 1], s.xyz[i * 3 + 2]]));
       if (p && p.x >= 0 && p.y >= 0 && p.x <= c.width && p.y <= c.height) pts.push(vec(p.x, p.y));
     }
+    // A close view can leave a group with no stars, and native Skia throws on an empty array.
+    if (!pts.length) return;
     const ink = Skia.Paint();
     ink.setStyle(PaintStyle.Stroke);
     ink.setStrokeWidth(sizes[g]);
