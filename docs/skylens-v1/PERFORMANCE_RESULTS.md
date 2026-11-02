@@ -34,7 +34,7 @@ The Layers panel now shows JS frame time (p50, p95, worst), stars drawn, scanned
 | Environment | Frame JS p50 | p95 | Note |
 |---|---|---|---|
 | Headless Chrome with software GPU | 7.4 ms | 37.2 ms | Web Skia under SwiftShader. Not comparable to iOS |
-| iPhone Simulator, Release, in CI | Awaiting a run | | `flow_diagnostics_atlas` screenshot |
+| iPhone 17 Simulator, iOS 26.2, Release, in CI, commit d36d01f | 15.4 ms | 24.5 ms | Deep Atlas, 203 frames, worst 132.0 ms. An earlier run, c5da24b, read 19.2 / 35.4 / 172.2 ms. Runs on a shared cloud Mac, so not a phone and not comparable to one |
 | Physical iPhone | `DEVICE_NOT_TESTED` | | Open Layers and read the panel after a minute of use |
 
 ## Stage 2 calculations, Node on this PC
